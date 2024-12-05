@@ -1,4 +1,7 @@
 const std = @import("std");
+const instructions = @import("instructions.zig");
+const decode = instructions.decode;
+const Instruction = instructions.Instruction;
 
 const CPUError = error{
     InvalidInstruction,
@@ -24,14 +27,27 @@ const Computer = struct {
     }
 
     fn evaluate(self: *Computer, instruction: u16) !void {
-        const nybbles = splitInstruction(instruction);
-        switch (nybbles[0]) {
-            0x6 => {
-                self.cpu.registers[nybbles[1]] = @intCast(instruction & 0x00ff);
+        switch (decode(instruction)) {
+            Instruction.load_immediate => |i| {
+                self.cpu.registers[i.register] = i.value;
             },
-            else => {
-                return CPUError.InvalidInstruction;
+            Instruction.add_immediate => |i| {
+                self.cpu.registers[i.register] +%= i.value;
             },
+            Instruction.register_set => |i| {
+                self.cpu.registers[i.target] = self.cpu.registers[i.source];
+            },
+            Instruction.register_or => |i| {
+                self.cpu.registers[i.target] = self.cpu.registers[i.target] | self.cpu.registers[i.source];
+            },
+            Instruction.register_and => |i| {
+                self.cpu.registers[i.target] = self.cpu.registers[i.target] & self.cpu.registers[i.source];
+            },
+            Instruction.register_xor => |i| {
+                self.cpu.registers[i.target] = self.cpu.registers[i.target] ^ self.cpu.registers[i.source];
+            },
+            Instruction.invalid => return CPUError.InvalidInstruction,
+            else => unreachable,
         }
     }
 };
@@ -53,8 +69,52 @@ test "splitInstruction splits instruction into nybbles" {
     try std.testing.expect(got[3] == 0xd);
 }
 
-test "evaluate 6XNN instruction" {
+test "evaluate 6xnn instruction" {
     var computer = Computer.init();
     try computer.evaluate(0x6123);
-    try std.testing.expect(computer.cpu.registers[1] == 0x23);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x23);
+}
+
+test "evaluate 7xnn instruction" {
+    var computer = Computer.init();
+    try computer.evaluate(0x6f00); // clear register F
+    try computer.evaluate(0x6123);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x23);
+    try computer.evaluate(0x7145);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x68);
+    try computer.evaluate(0x71a0);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x08); // overflow
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x00); // register F is not affected
+}
+
+test "evaluate 8xy0 instruction" {
+    var computer = Computer.init();
+    try computer.evaluate(0x6123);
+    try computer.evaluate(0x6234);
+    try computer.evaluate(0x8120);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x34);
+}
+
+test "evaluate 8xy1 instruction" {
+    var computer = Computer.init();
+    try computer.evaluate(0x6133);
+    try computer.evaluate(0x6255);
+    try computer.evaluate(0x8121);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x77);
+}
+
+test "evaluate 8xy2 instruction" {
+    var computer = Computer.init();
+    try computer.evaluate(0x6133);
+    try computer.evaluate(0x6255);
+    try computer.evaluate(0x8122);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x11);
+}
+
+test "evaluate 8xy3 instruction" {
+    var computer = Computer.init();
+    try computer.evaluate(0x6133);
+    try computer.evaluate(0x6255);
+    try computer.evaluate(0x8123);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x66);
 }

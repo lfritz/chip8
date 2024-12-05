@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Instruction = union(enum) {
+pub const Instruction = union(enum) {
     clear_screen,
     return_from_subroutine,
     jump: struct {
@@ -28,7 +28,7 @@ const Instruction = union(enum) {
         register: u4,
         value: u8,
     },
-    register_assign: struct {
+    register_set: struct {
         target: u4,
         source: u4,
     },
@@ -118,7 +118,7 @@ const Instruction = union(enum) {
     invalid,
 };
 
-fn decode(instruction: u16) Instruction {
+pub fn decode(instruction: u16) Instruction {
     const n0: u4 = @intCast(instruction >> 12);
     const n1: u4 = @intCast((instruction >> 8) & 0x000f);
     const n2: u4 = @intCast((instruction >> 4) & 0x000f);
@@ -156,7 +156,7 @@ fn decode(instruction: u16) Instruction {
             .value = b1,
         } },
         0x8 => switch (n3) {
-            0x0 => Instruction{ .register_assign = .{
+            0x0 => Instruction{ .register_set = .{
                 .target = n1,
                 .source = n2,
             } },
@@ -330,7 +330,7 @@ test "decode decodes valid instructions" {
     try std.testing.expectEqualDeep(want, got);
 
     got = decode(0x8ab0);
-    want = Instruction{ .register_assign = .{
+    want = Instruction{ .register_set = .{
         .target = 0xa,
         .source = 0xb,
     } };

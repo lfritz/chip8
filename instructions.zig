@@ -54,7 +54,7 @@ pub const Instruction = union(enum) {
     },
     register_shift_right: struct {
         target: u4,
-        by: u4,
+        source: u4,
     },
     register_sub_target: struct {
         target: u4,
@@ -62,7 +62,7 @@ pub const Instruction = union(enum) {
     },
     register_shift_left: struct {
         target: u4,
-        by: u4,
+        source: u4,
     },
     skip_if_not_equal: struct {
         register: [2]u4,
@@ -182,7 +182,7 @@ pub fn decode(instruction: u16) Instruction {
             } },
             0x6 => Instruction{ .register_shift_right = .{
                 .target = n1,
-                .by = n2,
+                .source = n2,
             } },
             0x7 => Instruction{ .register_sub_target = .{
                 .target = n1,
@@ -190,7 +190,7 @@ pub fn decode(instruction: u16) Instruction {
             } },
             0xe => Instruction{ .register_shift_left = .{
                 .target = n1,
-                .by = n2,
+                .source = n2,
             } },
             else => Instruction.invalid,
         },
@@ -374,7 +374,7 @@ test "decode decodes valid instructions" {
     got = decode(0x8ab6);
     want = Instruction{ .register_shift_right = .{
         .target = 0xa,
-        .by = 0xb,
+        .source = 0xb,
     } };
     try std.testing.expectEqualDeep(want, got);
 
@@ -388,7 +388,7 @@ test "decode decodes valid instructions" {
     got = decode(0x8abe);
     want = Instruction{ .register_shift_left = .{
         .target = 0xa,
-        .by = 0xb,
+        .source = 0xb,
     } };
     try std.testing.expectEqualDeep(want, got);
 

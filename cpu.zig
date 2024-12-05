@@ -46,6 +46,26 @@ const Computer = struct {
             Instruction.register_xor => |i| {
                 self.cpu.registers[i.target] = self.cpu.registers[i.target] ^ self.cpu.registers[i.source];
             },
+            Instruction.register_add => |i| {
+                self.cpu.registers[i.target], const overflow = @addWithOverflow(
+                    self.cpu.registers[i.target],
+                    self.cpu.registers[i.source],
+                );
+                self.cpu.registers[0xf] = overflow;
+            },
+            Instruction.register_sub => |i| {
+                self.cpu.registers[i.target], const overflow = @subWithOverflow(
+                    self.cpu.registers[i.target],
+                    self.cpu.registers[i.source],
+                );
+                self.cpu.registers[0xf] = ~overflow;
+            },
+            Instruction.register_shift_right => |i| {
+                const source = self.cpu.registers[i.source];
+                const lsb = source & 0x01;
+                self.cpu.registers[i.target] = source >> 1;
+                self.cpu.registers[0xf] = lsb;
+            },
             Instruction.invalid => return CPUError.InvalidInstruction,
             else => unreachable,
         }
@@ -117,4 +137,54 @@ test "evaluate 8xy3 instruction" {
     try computer.evaluate(0x6255);
     try computer.evaluate(0x8123);
     try std.testing.expect(computer.cpu.registers[0x1] == 0x66);
+}
+
+test "evaluate 8xy4 instruction" {
+    var computer = Computer.init();
+
+    // add
+    try computer.evaluate(0x61a1);
+    try computer.evaluate(0x6242);
+    try computer.evaluate(0x8124);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0xe3);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x00);
+
+    // add with overflow
+    try computer.evaluate(0x8124);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x25);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x01);
+}
+
+test "evaluate 8xy5 instruction" {
+    var computer = Computer.init();
+
+    // subtract
+    try computer.evaluate(0x61a1);
+    try computer.evaluate(0x6252);
+    try computer.evaluate(0x8125);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x4f);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x01);
+
+    // subtract with underflow
+    try computer.evaluate(0x8125);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0xfd);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x00);
+}
+
+test "evaluate 8xy6 instruction" {
+    var computer = Computer.init();
+
+    // right shift with lsb 0
+    try computer.evaluate(0x625a);
+    try computer.evaluate(0x8126);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x2d);
+    try std.testing.expect(computer.cpu.registers[0x2] == 0x5a);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x00);
+
+    // right shift with lsb 1
+    try computer.evaluate(0x62a5);
+    try computer.evaluate(0x8126);
+    try std.testing.expect(computer.cpu.registers[0x1] == 0x52);
+    try std.testing.expect(computer.cpu.registers[0x2] == 0xa5);
+    try std.testing.expect(computer.cpu.registers[0xf] == 0x01);
 }

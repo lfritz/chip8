@@ -93,23 +93,6 @@ const Computer = struct {
     }
 };
 
-fn splitInstruction(instruction: u16) [4]u4 {
-    return [_]u4{
-        @intCast((instruction & 0xf000) >> 0xc),
-        @intCast((instruction & 0x0f00) >> 0x8),
-        @intCast((instruction & 0x00f0) >> 0x4),
-        @intCast((instruction & 0x000f) >> 0x0),
-    };
-}
-
-test "splitInstruction splits instruction into nybbles" {
-    const got = splitInstruction(0xabcd);
-    try std.testing.expect(got[0] == 0xa);
-    try std.testing.expect(got[1] == 0xb);
-    try std.testing.expect(got[2] == 0xc);
-    try std.testing.expect(got[3] == 0xd);
-}
-
 test "evaluate 6xnn instruction" {
     var cpu = CPU.init();
     try cpu.evaluate(0x6123);

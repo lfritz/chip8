@@ -9,10 +9,12 @@ const CPUError = error{
 
 const CPU = struct {
     registers: [16]u8,
+    address_register: u12,
 
     fn init() CPU {
         return CPU{
             .registers = [_]u8{undefined} ** 16,
+            .address_register = 0,
         };
     }
 };
@@ -78,6 +80,12 @@ const Computer = struct {
                 const msb = (source & 0x80) >> 7;
                 self.cpu.registers[i.target] = source << 1;
                 self.cpu.registers[0xf] = msb;
+            },
+            Instruction.load_address_immediate => |i| {
+                self.cpu.address_register = i.address;
+            },
+            Instruction.add_address => |i| {
+                self.cpu.address_register +%= self.cpu.registers[i.register];
             },
             Instruction.invalid => return CPUError.InvalidInstruction,
             else => unreachable,
@@ -238,4 +246,20 @@ test "evaluate 8xye instruction" {
     try std.testing.expect(computer.cpu.registers[0x1] == 0x54);
     try std.testing.expect(computer.cpu.registers[0x2] == 0xaa);
     try std.testing.expect(computer.cpu.registers[0xf] == 0x01);
+}
+
+test "evaluate annn instruction" {
+    var computer = Computer.init();
+
+    try computer.evaluate(0xa123);
+    try std.testing.expect(computer.cpu.address_register == 0x123);
+}
+
+test "evaluate fx1e instruction" {
+    var computer = Computer.init();
+
+    try computer.evaluate(0xa123);
+    try computer.evaluate(0x6abc);
+    try computer.evaluate(0xfa1e);
+    try std.testing.expect(computer.cpu.address_register == 0x1df);
 }

@@ -30,13 +30,13 @@ const CPU = struct {
                 self.registers[i.target] = self.registers[i.source];
             },
             Instruction.register_or => |i| {
-                self.registers[i.target] = self.registers[i.target] | self.registers[i.source];
+                self.registers[i.target] |= self.registers[i.source];
             },
             Instruction.register_and => |i| {
-                self.registers[i.target] = self.registers[i.target] & self.registers[i.source];
+                self.registers[i.target] &= self.registers[i.source];
             },
             Instruction.register_xor => |i| {
-                self.registers[i.target] = self.registers[i.target] ^ self.registers[i.source];
+                self.registers[i.target] ^= self.registers[i.source];
             },
             Instruction.register_add => |i| {
                 self.registers[i.target], const overflow = @addWithOverflow(

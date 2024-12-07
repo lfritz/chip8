@@ -10,16 +10,36 @@ const CPUError = error{
 const CPU = struct {
     registers: [16]u8,
     address_register: u12,
+    program_counter: u12,
 
     fn init() CPU {
         return CPU{
             .registers = [_]u8{undefined} ** 16,
             .address_register = 0,
+            .program_counter = 0x200,
         };
     }
 
     fn evaluate(self: *CPU, instruction: u16) !void {
         switch (decode(instruction)) {
+            Instruction.jump => |i| {
+                self.program_counter = i.address;
+            },
+            Instruction.skip_if_equal_immediate => |i| {
+                if (self.registers[i.register] == i.value) {
+                    self.program_counter += 1;
+                }
+            },
+            Instruction.skip_if_not_equal_immediate => |i| {
+                if (self.registers[i.register] != i.value) {
+                    self.program_counter += 1;
+                }
+            },
+            Instruction.skip_if_equal => |i| {
+                if (self.registers[i.register[0]] == self.registers[i.register[1]]) {
+                    self.program_counter += 1;
+                }
+            },
             Instruction.load_immediate => |i| {
                 self.registers[i.register] = i.value;
             },
@@ -71,6 +91,11 @@ const CPU = struct {
                 self.registers[i.target] = source << 1;
                 self.registers[0xf] = msb;
             },
+            Instruction.skip_if_not_equal => |i| {
+                if (self.registers[i.register[0]] != self.registers[i.register[1]]) {
+                    self.program_counter += 1;
+                }
+            },
             Instruction.load_address_immediate => |i| {
                 self.address_register = i.address;
             },
@@ -92,6 +117,62 @@ const Computer = struct {
         };
     }
 };
+
+test "evaluate 1nnn instruction" {
+    var cpu = CPU.init();
+    try cpu.evaluate(0x1abc);
+    try std.testing.expect(cpu.program_counter == 0xabc);
+}
+
+test "evaluate 3nnn instruction" {
+    var cpu = CPU.init();
+
+    // no skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x3112);
+    try std.testing.expect(cpu.program_counter == 0xabc);
+
+    // skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x3111);
+    try std.testing.expect(cpu.program_counter == 0xabd);
+}
+
+test "evaluate 4nnn instruction" {
+    var cpu = CPU.init();
+
+    // skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x4112);
+    try std.testing.expect(cpu.program_counter == 0xabd);
+
+    // no skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x4111);
+    try std.testing.expect(cpu.program_counter == 0xabc);
+}
+
+test "evaluate 5nnn instruction" {
+    var cpu = CPU.init();
+
+    // no skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x6212);
+    try cpu.evaluate(0x5120);
+    try std.testing.expect(cpu.program_counter == 0xabc);
+
+    // skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x6211);
+    try cpu.evaluate(0x5120);
+    try std.testing.expect(cpu.program_counter == 0xabd);
+}
 
 test "evaluate 6xnn instruction" {
     var cpu = CPU.init();
@@ -229,6 +310,24 @@ test "evaluate 8xye instruction" {
     try std.testing.expect(cpu.registers[0x1] == 0x54);
     try std.testing.expect(cpu.registers[0x2] == 0xaa);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
+}
+
+test "evaluate 9nnn instruction" {
+    var cpu = CPU.init();
+
+    // skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x6212);
+    try cpu.evaluate(0x9120);
+    try std.testing.expect(cpu.program_counter == 0xabd);
+
+    // no skip
+    try cpu.evaluate(0x1abc);
+    try cpu.evaluate(0x6111);
+    try cpu.evaluate(0x6211);
+    try cpu.evaluate(0x9120);
+    try std.testing.expect(cpu.program_counter == 0xabc);
 }
 
 test "evaluate annn instruction" {

@@ -108,16 +108,6 @@ const CPU = struct {
     }
 };
 
-const Computer = struct {
-    cpu: CPU,
-
-    fn init() Computer {
-        return Computer{
-            .cpu = CPU.init(),
-        };
-    }
-};
-
 test "evaluate 1nnn instruction" {
     var cpu = CPU.init();
     try cpu.evaluate(0x1abc);

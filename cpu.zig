@@ -3,20 +3,22 @@ const instructions = @import("instructions.zig");
 const decode = instructions.decode;
 const Instruction = instructions.Instruction;
 
-const CPUError = error{
+pub const CPUError = error{
     InvalidInstruction,
 };
 
-const CPU = struct {
+pub const CPU = struct {
     registers: [16]u8,
     address_register: u12,
     program_counter: u12,
+    memory: []u8,
 
-    fn init() CPU {
+    pub fn init(memory: []u8) CPU {
         return CPU{
             .registers = [_]u8{undefined} ** 16,
             .address_register = 0,
             .program_counter = 0x200,
+            .memory = memory,
         };
     }
 
@@ -102,6 +104,22 @@ const CPU = struct {
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
             },
+            Instruction.store => |i| {
+                for (self.registers, 0..) |value, index| {
+                    if (index > i.up_to_register)
+                        break;
+                    self.memory[self.address_register] = value;
+                    self.address_register += 1;
+                }
+            },
+            Instruction.load => |i| {
+                for (&self.registers, 0..) |*register, index| {
+                    if (index > i.up_to_register)
+                        break;
+                    register.* = self.memory[self.address_register];
+                    self.address_register += 1;
+                }
+            },
             Instruction.invalid => return CPUError.InvalidInstruction,
             else => unreachable,
         }
@@ -109,13 +127,13 @@ const CPU = struct {
 };
 
 test "evaluate 1nnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x1abc);
     try std.testing.expect(cpu.program_counter == 0xabc);
 }
 
 test "evaluate 3nnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // no skip
     try cpu.evaluate(0x1abc);
@@ -131,7 +149,7 @@ test "evaluate 3nnn instruction" {
 }
 
 test "evaluate 4nnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // skip
     try cpu.evaluate(0x1abc);
@@ -147,7 +165,7 @@ test "evaluate 4nnn instruction" {
 }
 
 test "evaluate 5nnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // no skip
     try cpu.evaluate(0x1abc);
@@ -165,13 +183,13 @@ test "evaluate 5nnn instruction" {
 }
 
 test "evaluate 6xnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
 }
 
 test "evaluate 7xnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6f00); // clear register F
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
@@ -183,7 +201,7 @@ test "evaluate 7xnn instruction" {
 }
 
 test "evaluate 8xy0 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6123);
     try cpu.evaluate(0x6234);
     try cpu.evaluate(0x8120);
@@ -191,7 +209,7 @@ test "evaluate 8xy0 instruction" {
 }
 
 test "evaluate 8xy1 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8121);
@@ -199,7 +217,7 @@ test "evaluate 8xy1 instruction" {
 }
 
 test "evaluate 8xy2 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8122);
@@ -207,7 +225,7 @@ test "evaluate 8xy2 instruction" {
 }
 
 test "evaluate 8xy3 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8123);
@@ -215,7 +233,7 @@ test "evaluate 8xy3 instruction" {
 }
 
 test "evaluate 8xy4 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // add
     try cpu.evaluate(0x61a1);
@@ -231,7 +249,7 @@ test "evaluate 8xy4 instruction" {
 }
 
 test "evaluate 8xy5 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // subtraction: 0xa1 - 0x42
     try cpu.evaluate(0x61a1);
@@ -249,7 +267,7 @@ test "evaluate 8xy5 instruction" {
 }
 
 test "evaluate 8xy6 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // right shift with lsb 0
     try cpu.evaluate(0x62aa);
@@ -267,7 +285,7 @@ test "evaluate 8xy6 instruction" {
 }
 
 test "evaluate 8xy7 instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // subtraction: 0xa1 - 0x42
     try cpu.evaluate(0x6143);
@@ -285,7 +303,7 @@ test "evaluate 8xy7 instruction" {
 }
 
 test "evaluate 8xye instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // left shift with msb 0
     try cpu.evaluate(0x6255);
@@ -303,7 +321,7 @@ test "evaluate 8xye instruction" {
 }
 
 test "evaluate 9nnn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     // skip
     try cpu.evaluate(0x1abc);
@@ -321,17 +339,75 @@ test "evaluate 9nnn instruction" {
 }
 
 test "evaluate annn instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     try cpu.evaluate(0xa123);
     try std.testing.expect(cpu.address_register == 0x123);
 }
 
 test "evaluate fx1e instruction" {
-    var cpu = CPU.init();
+    var cpu = CPU.init(&.{});
 
     try cpu.evaluate(0xa123);
     try cpu.evaluate(0x6abc);
     try cpu.evaluate(0xfa1e);
     try std.testing.expect(cpu.address_register == 0x1df);
+}
+
+test "evaluate fx55 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var cpu = CPU.init(memory);
+
+    // store 16 zeros
+    cpu.address_register = 0xa00;
+    cpu.registers = .{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    try cpu.evaluate(0xff55);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, memory[0xa00..0xa10]);
+    try std.testing.expectEqual(0xa10, cpu.address_register);
+
+    // store registers 0 to 5
+    cpu.address_register = 0xa00;
+    cpu.registers = .{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+    try cpu.evaluate(0xf555);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, memory[0xa00..0xa10]);
+    try std.testing.expectEqual(0xa06, cpu.address_register);
+}
+
+test "evaluate fx65 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var cpu = CPU.init(memory);
+
+    // load 16 zeros
+    for (0xa00..0xa10) |i|
+        memory[i] = 0x00;
+    cpu.address_register = 0xa00;
+    try cpu.evaluate(0xff65);
+    try std.testing.expectEqual([16]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, cpu.registers);
+    try std.testing.expectEqual(0xa10, cpu.address_register);
+
+    // load registers 0 to 5
+    memory[0xa00] = 0x00;
+    memory[0xa01] = 0x11;
+    memory[0xa02] = 0x22;
+    memory[0xa03] = 0x33;
+    memory[0xa04] = 0x44;
+    memory[0xa05] = 0x55;
+    memory[0xa06] = 0x66;
+    memory[0xa07] = 0x77;
+    memory[0xa08] = 0x88;
+    memory[0xa09] = 0x99;
+    memory[0xa0a] = 0xaa;
+    memory[0xa0b] = 0xbb;
+    memory[0xa0c] = 0xcc;
+    memory[0xa0d] = 0xdd;
+    memory[0xa0e] = 0xee;
+    memory[0xa0f] = 0xff;
+    cpu.address_register = 0xa00;
+    try cpu.evaluate(0xf565);
+    try std.testing.expectEqual([16]u8{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, cpu.registers);
+    try std.testing.expectEqual(0xa06, cpu.address_register);
 }

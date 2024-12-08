@@ -104,6 +104,9 @@ pub const CPU = struct {
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
             },
+            Instruction.bdc => |i| {
+                // TODO
+            },
             Instruction.store => |i| {
                 for (self.registers, 0..) |value, index| {
                     if (index > i.up_to_register)
@@ -251,7 +254,7 @@ test "evaluate 8xy4 instruction" {
 test "evaluate 8xy5 instruction" {
     var cpu = CPU.init(&.{});
 
-    // subtraction: 0xa1 - 0x42
+    // subtraction: 0xa1 - 0x43
     try cpu.evaluate(0x61a1);
     try cpu.evaluate(0x6243);
     try cpu.evaluate(0x8125);

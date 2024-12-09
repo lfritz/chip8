@@ -104,8 +104,11 @@ pub const CPU = struct {
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
             },
-            Instruction.bdc => |i| {
-                // TODO
+            Instruction.bcd => |i| {
+                const value = self.registers[i.register];
+                self.memory[self.address_register + 0] = value / 100;
+                self.memory[self.address_register + 1] = (value % 100) / 10;
+                self.memory[self.address_register + 2] = value % 10;
             },
             Instruction.store => |i| {
                 for (self.registers, 0..) |value, index| {
@@ -355,6 +358,24 @@ test "evaluate fx1e instruction" {
     try cpu.evaluate(0x6abc);
     try cpu.evaluate(0xfa1e);
     try std.testing.expect(cpu.address_register == 0x1df);
+}
+
+test "evaluate fx33 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var cpu = CPU.init(memory);
+
+    memory[0xa00] = 0x00;
+    memory[0xa01] = 0x00;
+    memory[0xa02] = 0x00;
+    cpu.address_register = 0xa00;
+    cpu.registers[1] = 234;
+    try cpu.evaluate(0xf133);
+
+    try std.testing.expectEqual(0x2, memory[0xa00]);
+    try std.testing.expectEqual(0x3, memory[0xa01]);
+    try std.testing.expectEqual(0x4, memory[0xa02]);
 }
 
 test "evaluate fx55 instruction" {

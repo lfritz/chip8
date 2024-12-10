@@ -5,17 +5,23 @@ const Instruction = instructions.Instruction;
 
 pub const CPUError = error{
     InvalidInstruction,
+    StackOverflow,
+    StackUnderflow,
 };
 
 pub const CPU = struct {
-    registers: [16]u8,
+    registers: [0x10]u8,
+    stack: [0x10]u12,
+    stack_index: u8,
     address_register: u12,
     program_counter: u12,
     memory: []u8,
 
     pub fn init(memory: []u8) CPU {
         return CPU{
-            .registers = [_]u8{undefined} ** 16,
+            .registers = [_]u8{undefined} ** 0x10,
+            .stack = [_]u12{undefined} ** 0x10,
+            .stack_index = 0,
             .address_register = 0,
             .program_counter = 0x200,
             .memory = memory,
@@ -25,6 +31,19 @@ pub const CPU = struct {
     fn evaluate(self: *CPU, instruction: u16) !void {
         switch (decode(instruction)) {
             Instruction.jump => |i| {
+                self.program_counter = i.address;
+            },
+            Instruction.return_from_subroutine => {
+                if (self.stack_index < 0x1)
+                    return CPUError.StackUnderflow;
+                self.stack_index -= 1;
+                self.program_counter = self.stack[self.stack_index];
+            },
+            Instruction.call_subroutine => |i| {
+                if (self.stack_index > 0xf)
+                    return CPUError.StackOverflow;
+                self.stack[self.stack_index] = self.program_counter;
+                self.stack_index += 1;
                 self.program_counter = i.address;
             },
             Instruction.skip_if_equal_immediate => |i| {
@@ -136,6 +155,32 @@ test "evaluate 1nnn instruction" {
     var cpu = CPU.init(&.{});
     try cpu.evaluate(0x1abc);
     try std.testing.expect(cpu.program_counter == 0xabc);
+}
+
+test "evaluate 2nnn instruction" {
+    var cpu = CPU.init(&.{});
+
+    // do 16 subroutine calls
+    for (0..16) |_| {
+        try cpu.evaluate(0x2abc);
+        try std.testing.expect(cpu.program_counter == 0xabc);
+    }
+
+    // the next subroutine call should be a stack overflow
+    try std.testing.expectError(CPUError.StackOverflow, cpu.evaluate(0x2abc));
+
+    // do 15 subroutine returns
+    for (0..15) |_| {
+        try cpu.evaluate(0x00ee);
+        try std.testing.expect(cpu.program_counter == 0xabc);
+    }
+
+    // one final subroutine return
+    try cpu.evaluate(0x00ee);
+    try std.testing.expect(cpu.program_counter == 0x200);
+
+    // the next subroutine return should be a stack underflow
+    try std.testing.expectError(CPUError.StackUnderflow, cpu.evaluate(0x00ee));
 }
 
 test "evaluate 3nnn instruction" {

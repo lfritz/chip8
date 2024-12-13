@@ -128,7 +128,9 @@ pub const CPU = struct {
             Instruction.load_address_immediate => |i| {
                 self.address_register = i.address;
             },
-            Instruction.computed_jump => unreachable,
+            Instruction.computed_jump => |i| {
+                self.address_register = i.address +% self.registers[0];
+            },
             Instruction.rand => unreachable,
             Instruction.sprite => unreachable,
             Instruction.skip_if_key_pressed => unreachable,
@@ -421,6 +423,15 @@ test "evaluate annn instruction" {
     try cpu.evaluate(0xa123);
     try std.testing.expect(cpu.address_register == 0x123);
     try std.testing.expect(cpu.program_counter == 0x201);
+}
+
+test "evaluate bnnn instruction" {
+    var cpu = CPU.init(&.{});
+
+    try cpu.evaluate(0x6023);
+    try cpu.evaluate(0xb234);
+    try std.testing.expect(cpu.address_register == 0x257);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate fx1e instruction" {

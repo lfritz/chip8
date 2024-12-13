@@ -30,15 +30,16 @@ pub const CPU = struct {
 
     fn evaluate(self: *CPU, instruction: u16) !void {
         switch (decode(instruction)) {
-            Instruction.jump => |i| {
-                self.program_counter = i.address;
-                return;
-            },
+            Instruction.clear_screen => unreachable,
             Instruction.return_from_subroutine => {
                 if (self.stack_index < 0x1)
                     return CPUError.StackUnderflow;
                 self.stack_index -= 1;
                 self.program_counter = self.stack[self.stack_index];
+                return;
+            },
+            Instruction.jump => |i| {
+                self.program_counter = i.address;
                 return;
             },
             Instruction.call_subroutine => |i| {
@@ -127,9 +128,19 @@ pub const CPU = struct {
             Instruction.load_address_immediate => |i| {
                 self.address_register = i.address;
             },
+            Instruction.computed_jump => unreachable,
+            Instruction.rand => unreachable,
+            Instruction.sprite => unreachable,
+            Instruction.skip_if_key_pressed => unreachable,
+            Instruction.skip_if_key_not_pressed => unreachable,
+            Instruction.get_delay_timer => unreachable,
+            Instruction.wait_for_key => unreachable,
+            Instruction.set_delay_timer => unreachable,
+            Instruction.set_sound_timer => unreachable,
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
             },
+            Instruction.select_sprite => unreachable,
             Instruction.bcd => |i| {
                 const value = self.registers[i.register];
                 self.memory[self.address_register + 0] = value / 100;
@@ -153,7 +164,6 @@ pub const CPU = struct {
                 }
             },
             Instruction.invalid => return CPUError.InvalidInstruction,
-            else => unreachable,
         }
         self.program_counter += 1;
     }

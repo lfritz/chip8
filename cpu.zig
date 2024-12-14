@@ -16,8 +16,10 @@ pub const CPU = struct {
     address_register: u12,
     program_counter: u12,
     memory: []u8,
+    random: std.Random,
 
     pub fn init(memory: []u8) CPU {
+        var prng = std.Random.DefaultPrng.init(0);
         return CPU{
             .registers = [_]u8{undefined} ** 0x10,
             .stack = [_]u12{undefined} ** 0x10,
@@ -25,6 +27,7 @@ pub const CPU = struct {
             .address_register = 0,
             .program_counter = 0x200,
             .memory = memory,
+            .random = prng.random(),
         };
     }
 
@@ -131,7 +134,9 @@ pub const CPU = struct {
             Instruction.computed_jump => |i| {
                 self.address_register = i.address +% self.registers[0];
             },
-            Instruction.rand => unreachable,
+            Instruction.rand => |i| {
+                self.registers[i.register] = self.random.int(u8) & i.bitmask;
+            },
             Instruction.sprite => unreachable,
             Instruction.skip_if_key_pressed => unreachable,
             Instruction.skip_if_key_not_pressed => unreachable,
@@ -432,6 +437,16 @@ test "evaluate bnnn instruction" {
     try cpu.evaluate(0xb234);
     try std.testing.expect(cpu.address_register == 0x257);
     try std.testing.expect(cpu.program_counter == 0x202);
+}
+
+test "evaluate cxnn instruction" {
+    var cpu = CPU.init(&.{});
+
+    // this only tests that the bitmask works
+    cpu.registers[0xa] = 0x00;
+    try cpu.evaluate(0xca0f);
+    try std.testing.expect(cpu.registers[0xa] & 0xf0 == 0x00);
+    try std.testing.expect(cpu.program_counter == 0x201);
 }
 
 test "evaluate fx1e instruction" {

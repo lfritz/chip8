@@ -4,6 +4,28 @@ const decode = instructions.decode;
 const Instruction = instructions.Instruction;
 const Screen = @import("screen.zig").Screen;
 
+const program_start = 0x200;
+const font_bytes = 0x50;
+const font = [font_bytes]u8{
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+};
+const font_start = program_start - font_bytes;
+
 pub const CPUError = error{
     InvalidInstruction,
     StackOverflow,
@@ -22,12 +44,15 @@ pub const CPU = struct {
 
     pub fn init(memory: []u8, screen: *Screen) CPU {
         var prng = std.Random.DefaultPrng.init(0);
+        for (font, 0..) |value, index| {
+            memory[font_start + index] = value;
+        }
         return CPU{
             .registers = [_]u8{undefined} ** 0x10,
             .stack = [_]u12{undefined} ** 0x10,
             .stack_index = 0,
             .address_register = 0,
-            .program_counter = 0x200,
+            .program_counter = program_start,
             .memory = memory,
             .screen = screen,
             .random = prng.random(),
@@ -36,7 +61,9 @@ pub const CPU = struct {
 
     fn evaluate(self: *CPU, instruction: u16) !void {
         switch (decode(instruction)) {
-            Instruction.clear_screen => unreachable,
+            Instruction.clear_screen => {
+                self.screen.clear();
+            },
             Instruction.return_from_subroutine => {
                 if (self.stack_index < 0x1)
                     return CPUError.StackUnderflow;
@@ -140,17 +167,44 @@ pub const CPU = struct {
             Instruction.rand => |i| {
                 self.registers[i.register] = self.random.int(u8) & i.bitmask;
             },
-            Instruction.sprite => unreachable,
-            Instruction.skip_if_key_pressed => unreachable,
-            Instruction.skip_if_key_not_pressed => unreachable,
-            Instruction.get_delay_timer => unreachable,
-            Instruction.wait_for_key => unreachable,
-            Instruction.set_delay_timer => unreachable,
-            Instruction.set_sound_timer => unreachable,
+            Instruction.sprite => |i| {
+                const x = self.registers[i.register_x];
+                const y = self.registers[i.register_y];
+                const from = self.address_register;
+                const to = from + i.size;
+                const flipped = self.screen.draw(@intCast(x), @intCast(y), self.memory[from..to]);
+                if (flipped) {
+                    self.registers[0xf] = 0x01;
+                } else {
+                    self.registers[0xf] = 0x00;
+                }
+            },
+            Instruction.skip_if_key_pressed => {
+                unreachable; // TODO implement skip if key pressed
+            },
+            Instruction.skip_if_key_not_pressed => {
+                unreachable; // TODO implement skip if key not pressed
+            },
+            Instruction.get_delay_timer => {
+                unreachable; // TODO implement get delay timer
+            },
+            Instruction.wait_for_key => {
+                unreachable; // TODO implement wait for key
+            },
+            Instruction.set_delay_timer => {
+                unreachable; // TODO implement set delay timer
+            },
+            Instruction.set_sound_timer => {
+                unreachable; // TODO implement set sound timer
+            },
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
             },
-            Instruction.select_sprite => unreachable,
+            Instruction.select_sprite => |i| {
+                const digit = self.registers[i.register];
+                const address = font_start + 5 * @as(u12, digit);
+                self.address_register = address;
+            },
             Instruction.bcd => |i| {
                 const value = self.registers[i.register];
                 self.memory[self.address_register + 0] = value / 100;
@@ -179,16 +233,34 @@ pub const CPU = struct {
     }
 };
 
-test "evaluate 1nnn instruction" {
+test "evaluate 00e0 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+    screen.rows[0] = 0xffffffffffffffff;
+    try cpu.evaluate(0x00e0);
+    try std.testing.expect(screen.rows[0] == 0);
+    try std.testing.expect(cpu.program_counter == 0x201);
+}
+
+test "evaluate 1nnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
     try cpu.evaluate(0x1abc);
     try std.testing.expect(cpu.program_counter == 0xabc);
 }
 
 test "evaluate 2nnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // do 16 subroutine calls
     for (0..16) |_| {
@@ -214,40 +286,60 @@ test "evaluate 2nnn instruction" {
 }
 
 test "evaluate 3nnn instruction, no skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3112);
     try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 3nnn instruction, skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3111);
     try std.testing.expect(cpu.program_counter == 0x203);
 }
 
 test "evaluate 4nnn instruction, skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4112);
     try std.testing.expect(cpu.program_counter == 0x203);
 }
 
 test "evaluate 4nnn instruction, no skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4111);
     try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 5nnn instruction, no skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x5120);
@@ -255,8 +347,12 @@ test "evaluate 5nnn instruction, no skip" {
 }
 
 test "evaluate 5nnn instruction, skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x5120);
@@ -264,16 +360,24 @@ test "evaluate 5nnn instruction, skip" {
 }
 
 test "evaluate 6xnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
     try std.testing.expect(cpu.program_counter == 0x201);
 }
 
 test "evaluate 7xnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6f00); // clear register F
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
@@ -286,8 +390,12 @@ test "evaluate 7xnn instruction" {
 }
 
 test "evaluate 8xy0 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6123);
     try cpu.evaluate(0x6234);
     try cpu.evaluate(0x8120);
@@ -296,8 +404,12 @@ test "evaluate 8xy0 instruction" {
 }
 
 test "evaluate 8xy1 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8121);
@@ -306,8 +418,12 @@ test "evaluate 8xy1 instruction" {
 }
 
 test "evaluate 8xy2 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8122);
@@ -316,8 +432,12 @@ test "evaluate 8xy2 instruction" {
 }
 
 test "evaluate 8xy3 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8123);
@@ -326,8 +446,11 @@ test "evaluate 8xy3 instruction" {
 }
 
 test "evaluate 8xy4 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // add
     try cpu.evaluate(0x61a1);
@@ -345,8 +468,11 @@ test "evaluate 8xy4 instruction" {
 }
 
 test "evaluate 8xy5 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // subtraction: 0xa1 - 0x43
     try cpu.evaluate(0x61a1);
@@ -366,8 +492,11 @@ test "evaluate 8xy5 instruction" {
 }
 
 test "evaluate 8xy6 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // right shift with lsb 0
     try cpu.evaluate(0x62aa);
@@ -387,8 +516,11 @@ test "evaluate 8xy6 instruction" {
 }
 
 test "evaluate 8xy7 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // subtraction: 0xa1 - 0x42
     try cpu.evaluate(0x6143);
@@ -408,8 +540,11 @@ test "evaluate 8xy7 instruction" {
 }
 
 test "evaluate 8xye instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // left shift with msb 0
     try cpu.evaluate(0x6255);
@@ -429,8 +564,12 @@ test "evaluate 8xye instruction" {
 }
 
 test "evaluate 9nnn instruction, skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x9120);
@@ -438,8 +577,12 @@ test "evaluate 9nnn instruction, skip" {
 }
 
 test "evaluate 9nnn instruction, no skip" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x9120);
@@ -447,8 +590,11 @@ test "evaluate 9nnn instruction, no skip" {
 }
 
 test "evaluate annn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     try cpu.evaluate(0xa123);
     try std.testing.expect(cpu.address_register == 0x123);
@@ -456,8 +602,11 @@ test "evaluate annn instruction" {
 }
 
 test "evaluate bnnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     try cpu.evaluate(0x6023);
     try cpu.evaluate(0xb234);
@@ -466,8 +615,11 @@ test "evaluate bnnn instruction" {
 }
 
 test "evaluate cxnn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
 
     // this only tests that the bitmask works
     cpu.registers[0xa] = 0x00;
@@ -476,15 +628,50 @@ test "evaluate cxnn instruction" {
     try std.testing.expect(cpu.program_counter == 0x201);
 }
 
-test "evaluate fx1e instruction" {
+test "evaluate dxyn instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
     var screen = Screen.init();
-    var cpu = CPU.init(&.{}, &screen);
+    var cpu = CPU.init(memory, &screen);
+
+    // define a 1-byte sprite
+    memory[0x800] = 0x5a;
+    cpu.address_register = 0x800;
+
+    // draw the sprite in the bottom-right corner of the screen
+    cpu.registers[0xa] = 0x38;
+    cpu.registers[0xb] = 0x1f;
+    try cpu.evaluate(0xdab1);
+
+    try std.testing.expect(screen.rows[0x1f] == 0x000000000000005a);
+}
+
+test "evaluate fx1e instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
 
     try cpu.evaluate(0xa123);
     try cpu.evaluate(0x6abc);
     try cpu.evaluate(0xfa1e);
     try std.testing.expect(cpu.address_register == 0x1df);
     try std.testing.expect(cpu.program_counter == 0x203);
+}
+
+test "evaluate fx29 instruction" {
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, 0x1000);
+    defer allocator.free(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
+
+    try cpu.evaluate(0x6a04);
+    try cpu.evaluate(0xfa29);
+    try std.testing.expect(cpu.address_register == 0x1c4);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate fx33 instruction" {

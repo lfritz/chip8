@@ -2,19 +2,38 @@
 const ray = @cImport({
     @cInclude("raylib.h");
 });
+const screen = @import("screen.zig");
+const std = @import("std");
 
 pub fn main() void {
-    const zoom = 4;
+    const zoom = 5;
     const width = 0x40;
     const height = 0x20;
+    const border = 2;
+    const pixel_width = -border + (1 << zoom) - border;
 
     const color = ray.ORANGE;
     const bgcolor = ray.BLACK;
 
-    const screenWidth = width << zoom;
-    const screenHeight = height << zoom;
+    const screen_width = width << zoom;
+    const screen_height = height << zoom;
 
-    ray.InitWindow(screenWidth, screenHeight, "CHIP-8");
+    // draw an arrow in the top-left corner
+    var scr = screen.Screen.init();
+    const sprite = [_]u8{
+        0b00001000,
+        0b00011100,
+        0b00111110,
+        0b01111111,
+        0b00011100,
+        0b00011100,
+        0b00011100,
+        0b00011100,
+        0b00011100,
+    };
+    _ = scr.draw(0, 1, &sprite);
+
+    ray.InitWindow(screen_width, screen_height, "CHIP-8");
     defer ray.CloseWindow();
 
     ray.SetTargetFPS(60);
@@ -23,11 +42,23 @@ pub fn main() void {
         ray.BeginDrawing();
         defer ray.EndDrawing();
 
-        // draw the corner pixels
         ray.ClearBackground(bgcolor);
-        ray.DrawRectangle(0, 0, 0x10, 0x10, color);
-        ray.DrawRectangle(0x3f << zoom, 0, 0x10, 0x10, color);
-        ray.DrawRectangle(0, 0x1f << zoom, 0x10, 0x10, color);
-        ray.DrawRectangle(0x3f << zoom, 0x1f << zoom, 0x10, 0x10, color);
+        for (0..height) |row| {
+            for (0..width) |col| {
+                const x: u6 = @intCast(col);
+                const y: u6 = @intCast(row);
+                if (scr.get(x, y)) {
+                    const cx: c_int = @intCast(col);
+                    const cy: c_int = @intCast(row);
+                    ray.DrawRectangle(
+                        (cx << zoom) + border,
+                        (cy << zoom) + border,
+                        pixel_width,
+                        pixel_width,
+                        color,
+                    );
+                }
+            }
+        }
     }
 }

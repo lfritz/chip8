@@ -1,25 +1,25 @@
 const std = @import("std");
 
-const Screen = struct {
+pub const Screen = struct {
     rows: [0x20]u64,
 
-    fn init() Screen {
+    pub fn init() Screen {
         return Screen{
             .rows = [_]u64{undefined} ** 0x20,
         };
     }
 
-    fn clear(self: *Screen) void {
+    pub fn clear(self: *Screen) void {
         for (&self.rows) |*row| {
             row.* = 0;
         }
     }
 
-    fn get(self: *Screen, x: u6, y: u6) bool {
+    pub fn get(self: *const Screen, x: u6, y: u6) bool {
         return self.rows[y] & (@as(u64, 1) << (0x3f - x)) != 0;
     }
 
-    fn draw(self: *Screen, x: u6, y: u8, sprite: []const u8) bool {
+    pub fn draw(self: *Screen, x: u6, y: u8, sprite: []const u8) bool {
         var result = false;
         const shift = 0x40 - 0x08 - x;
         for (sprite, y..) |v, i| {

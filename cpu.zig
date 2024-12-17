@@ -2,6 +2,7 @@ const std = @import("std");
 const instructions = @import("instructions.zig");
 const decode = instructions.decode;
 const Instruction = instructions.Instruction;
+const Screen = @import("screen.zig").Screen;
 
 pub const CPUError = error{
     InvalidInstruction,
@@ -16,9 +17,10 @@ pub const CPU = struct {
     address_register: u12,
     program_counter: u12,
     memory: []u8,
+    screen: *Screen,
     random: std.Random,
 
-    pub fn init(memory: []u8) CPU {
+    pub fn init(memory: []u8, screen: *Screen) CPU {
         var prng = std.Random.DefaultPrng.init(0);
         return CPU{
             .registers = [_]u8{undefined} ** 0x10,
@@ -27,6 +29,7 @@ pub const CPU = struct {
             .address_register = 0,
             .program_counter = 0x200,
             .memory = memory,
+            .screen = screen,
             .random = prng.random(),
         };
     }
@@ -177,13 +180,15 @@ pub const CPU = struct {
 };
 
 test "evaluate 1nnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x1abc);
     try std.testing.expect(cpu.program_counter == 0xabc);
 }
 
 test "evaluate 2nnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // do 16 subroutine calls
     for (0..16) |_| {
@@ -209,35 +214,40 @@ test "evaluate 2nnn instruction" {
 }
 
 test "evaluate 3nnn instruction, no skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3112);
     try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 3nnn instruction, skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3111);
     try std.testing.expect(cpu.program_counter == 0x203);
 }
 
 test "evaluate 4nnn instruction, skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4112);
     try std.testing.expect(cpu.program_counter == 0x203);
 }
 
 test "evaluate 4nnn instruction, no skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4111);
     try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 5nnn instruction, no skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x5120);
@@ -245,7 +255,8 @@ test "evaluate 5nnn instruction, no skip" {
 }
 
 test "evaluate 5nnn instruction, skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x5120);
@@ -253,14 +264,16 @@ test "evaluate 5nnn instruction, skip" {
 }
 
 test "evaluate 6xnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
     try std.testing.expect(cpu.program_counter == 0x201);
 }
 
 test "evaluate 7xnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6f00); // clear register F
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
@@ -273,7 +286,8 @@ test "evaluate 7xnn instruction" {
 }
 
 test "evaluate 8xy0 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6123);
     try cpu.evaluate(0x6234);
     try cpu.evaluate(0x8120);
@@ -282,7 +296,8 @@ test "evaluate 8xy0 instruction" {
 }
 
 test "evaluate 8xy1 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8121);
@@ -291,7 +306,8 @@ test "evaluate 8xy1 instruction" {
 }
 
 test "evaluate 8xy2 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8122);
@@ -300,7 +316,8 @@ test "evaluate 8xy2 instruction" {
 }
 
 test "evaluate 8xy3 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6133);
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8123);
@@ -309,7 +326,8 @@ test "evaluate 8xy3 instruction" {
 }
 
 test "evaluate 8xy4 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // add
     try cpu.evaluate(0x61a1);
@@ -327,7 +345,8 @@ test "evaluate 8xy4 instruction" {
 }
 
 test "evaluate 8xy5 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // subtraction: 0xa1 - 0x43
     try cpu.evaluate(0x61a1);
@@ -347,7 +366,8 @@ test "evaluate 8xy5 instruction" {
 }
 
 test "evaluate 8xy6 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // right shift with lsb 0
     try cpu.evaluate(0x62aa);
@@ -367,7 +387,8 @@ test "evaluate 8xy6 instruction" {
 }
 
 test "evaluate 8xy7 instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // subtraction: 0xa1 - 0x42
     try cpu.evaluate(0x6143);
@@ -387,7 +408,8 @@ test "evaluate 8xy7 instruction" {
 }
 
 test "evaluate 8xye instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // left shift with msb 0
     try cpu.evaluate(0x6255);
@@ -407,7 +429,8 @@ test "evaluate 8xye instruction" {
 }
 
 test "evaluate 9nnn instruction, skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x9120);
@@ -415,7 +438,8 @@ test "evaluate 9nnn instruction, skip" {
 }
 
 test "evaluate 9nnn instruction, no skip" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x9120);
@@ -423,7 +447,8 @@ test "evaluate 9nnn instruction, no skip" {
 }
 
 test "evaluate annn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     try cpu.evaluate(0xa123);
     try std.testing.expect(cpu.address_register == 0x123);
@@ -431,7 +456,8 @@ test "evaluate annn instruction" {
 }
 
 test "evaluate bnnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     try cpu.evaluate(0x6023);
     try cpu.evaluate(0xb234);
@@ -440,7 +466,8 @@ test "evaluate bnnn instruction" {
 }
 
 test "evaluate cxnn instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     // this only tests that the bitmask works
     cpu.registers[0xa] = 0x00;
@@ -450,7 +477,8 @@ test "evaluate cxnn instruction" {
 }
 
 test "evaluate fx1e instruction" {
-    var cpu = CPU.init(&.{});
+    var screen = Screen.init();
+    var cpu = CPU.init(&.{}, &screen);
 
     try cpu.evaluate(0xa123);
     try cpu.evaluate(0x6abc);
@@ -463,7 +491,8 @@ test "evaluate fx33 instruction" {
     const allocator = std.testing.allocator;
     const memory = try allocator.alloc(u8, 0x1000);
     defer allocator.free(memory);
-    var cpu = CPU.init(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
 
     memory[0xa00] = 0x00;
     memory[0xa01] = 0x00;
@@ -482,7 +511,8 @@ test "evaluate fx55 instruction" {
     const allocator = std.testing.allocator;
     const memory = try allocator.alloc(u8, 0x1000);
     defer allocator.free(memory);
-    var cpu = CPU.init(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
 
     // store 16 zeros
     cpu.address_register = 0xa00;
@@ -505,7 +535,8 @@ test "evaluate fx65 instruction" {
     const allocator = std.testing.allocator;
     const memory = try allocator.alloc(u8, 0x1000);
     defer allocator.free(memory);
-    var cpu = CPU.init(memory);
+    var screen = Screen.init();
+    var cpu = CPU.init(memory, &screen);
 
     // load 16 zeros
     for (0xa00..0xa10) |i|

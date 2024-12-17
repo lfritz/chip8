@@ -1,22 +1,25 @@
 const std = @import("std");
-const cpu = @import("cpu.zig");
-const CPU = cpu.CPU;
+const CPU = @import("cpu.zig").CPU;
+const Screen = @import("screen.zig").Screen;
 
-const Computer = struct {
+pub const Computer = struct {
     allocator: std.mem.Allocator,
     cpu: CPU,
     memory: []u8,
+    screen: Screen,
 
-    fn init(allocator: std.mem.Allocator) !Computer {
+    pub fn init(allocator: std.mem.Allocator) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
+        var screen = Screen.init();
         return Computer{
             .allocator = allocator,
-            .cpu = CPU.init(memory),
+            .cpu = CPU.init(memory, &screen),
             .memory = memory,
+            .screen = screen,
         };
     }
 
-    fn free(self: *Computer) void {
+    pub fn free(self: *Computer) void {
         self.allocator.free(self.memory);
     }
 };

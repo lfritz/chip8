@@ -1,11 +1,11 @@
 // build with `zig build-exe main.zig -lc -lraylib`
+const std = @import("std");
 const ray = @cImport({
     @cInclude("raylib.h");
 });
-const screen = @import("screen.zig");
-const std = @import("std");
+const Computer = @import("computer.zig").Computer;
 
-pub fn main() void {
+pub fn main() !void {
     const zoom = 5;
     const width = 0x40;
     const height = 0x20;
@@ -18,8 +18,12 @@ pub fn main() void {
     const screen_width = width << zoom;
     const screen_height = height << zoom;
 
+    const allocator: std.mem.Allocator = std.heap.c_allocator;
+    var computer = try Computer.init(allocator);
+    defer computer.free();
+
     // draw an arrow in the top-left corner
-    var scr = screen.Screen.init();
+    var scr = computer.screen;
     const sprite = [_]u8{
         0b00001000,
         0b00011100,

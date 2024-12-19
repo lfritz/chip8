@@ -172,7 +172,7 @@ pub const CPU = struct {
                 const y = self.registers[i.register_y];
                 const from = self.address_register;
                 const to = from + i.size;
-                const flipped = self.screen.draw(@intCast(x), @intCast(y), self.memory[from..to]);
+                const flipped = try self.screen.draw(@intCast(x), @intCast(y), self.memory[from..to]);
                 if (flipped) {
                     self.registers[0xf] = 0x01;
                 } else {

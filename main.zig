@@ -35,7 +35,7 @@ pub fn main() !void {
         0b00011100,
         0b00011100,
     };
-    _ = scr.draw(0, 1, &sprite);
+    _ = try scr.draw(0, 1, &sprite);
 
     ray.InitWindow(screen_width, screen_height, "CHIP-8");
     defer ray.CloseWindow();
@@ -51,7 +51,7 @@ pub fn main() !void {
             for (0..width) |col| {
                 const x: u6 = @intCast(col);
                 const y: u6 = @intCast(row);
-                if (scr.get(x, y)) {
+                if (try scr.get(x, y)) {
                     const cx: c_int = @intCast(col);
                     const cy: c_int = @intCast(row);
                     ray.DrawRectangle(

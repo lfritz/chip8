@@ -26,7 +26,7 @@ const font = [font_bytes]u8{
 };
 const font_start = program_start - font_bytes;
 
-pub const CPUError = error{
+pub const Error = error{
     InvalidInstruction,
     StackOverflow,
     StackUnderflow,
@@ -85,7 +85,7 @@ pub const Computer = struct {
             },
             Instruction.return_from_subroutine => {
                 if (self.stack_index < 0x1)
-                    return CPUError.StackUnderflow;
+                    return Error.StackUnderflow;
                 self.stack_index -= 1;
                 self.program_counter = self.stack[self.stack_index];
                 return;
@@ -96,7 +96,7 @@ pub const Computer = struct {
             },
             Instruction.call_subroutine => |i| {
                 if (self.stack_index > 0xf)
-                    return CPUError.StackOverflow;
+                    return Error.StackOverflow;
                 self.stack[self.stack_index] = self.program_counter + 2;
                 self.stack_index += 1;
                 self.program_counter = i.address;
@@ -246,7 +246,7 @@ pub const Computer = struct {
                     self.address_register += 1;
                 }
             },
-            Instruction.invalid => return CPUError.InvalidInstruction,
+            Instruction.invalid => return Error.InvalidInstruction,
         }
         self.program_counter += 2;
     }
@@ -286,7 +286,7 @@ test "evaluate 2nnn instruction" {
     }
 
     // the next subroutine call should be a stack overflow
-    try std.testing.expectError(CPUError.StackOverflow, computer.evaluate(0x2abc));
+    try std.testing.expectError(Error.StackOverflow, computer.evaluate(0x2abc));
 
     // do 15 subroutine returns
     for (0..15) |_| {
@@ -299,7 +299,7 @@ test "evaluate 2nnn instruction" {
     try std.testing.expect(computer.program_counter == 0x202);
 
     // the next subroutine return should be a stack underflow
-    try std.testing.expectError(CPUError.StackUnderflow, computer.evaluate(0x00ee));
+    try std.testing.expectError(Error.StackUnderflow, computer.evaluate(0x00ee));
 }
 
 test "evaluate 3nnn instruction, no skip" {

@@ -96,7 +96,7 @@ pub fn main() !void {
 
     while (!ray.WindowShouldClose()) {
         c.tick() catch |err| {
-            if (err == computer.CPUError.InvalidInstruction) {
+            if (err == computer.Error.InvalidInstruction) {
                 const addr = c.program_counter;
                 const i = c.loadInstruction();
                 ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));

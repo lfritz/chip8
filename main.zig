@@ -3,8 +3,8 @@ const std = @import("std");
 const ray = @cImport({
     @cInclude("raylib.h");
 });
-const cpu = @import("cpu.zig");
-const Computer = @import("computer.zig").Computer;
+const CPU = @import("cpu.zig").CPU;
+const CPUError = @import("cpu.zig").CPUError;
 
 const program =
     \\ 600c f029 6100 6200 d125
@@ -85,10 +85,10 @@ pub fn main() !void {
     const screen_height = height << zoom;
 
     const allocator: std.mem.Allocator = std.heap.c_allocator;
-    var computer = try Computer.init(allocator);
-    defer computer.free();
+    var cpu = try CPU.init(allocator);
+    defer cpu.free();
 
-    try loadProgram(program, computer.memory[0x200..]);
+    try loadProgram(program, cpu.memory[0x200..]);
 
     ray.InitWindow(screen_width, screen_height, "CHIP-8");
     defer ray.CloseWindow();
@@ -96,10 +96,10 @@ pub fn main() !void {
     ray.SetTargetFPS(60);
 
     while (!ray.WindowShouldClose()) {
-        computer.tick() catch |err| {
-            if (err == cpu.CPUError.InvalidInstruction) {
-                const addr = computer.cpu.program_counter;
-                const i = computer.cpu.loadInstruction();
+        cpu.tick() catch |err| {
+            if (err == CPUError.InvalidInstruction) {
+                const addr = cpu.program_counter;
+                const i = cpu.loadInstruction();
                 ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
                 return err;
             }
@@ -113,7 +113,7 @@ pub fn main() !void {
             for (0..width) |col| {
                 const x: u6 = @intCast(col);
                 const y: u6 = @intCast(row);
-                if (try computer.screen.get(x, y)) {
+                if (try cpu.screen.get(x, y)) {
                     const cx: c_int = @intCast(col);
                     const cy: c_int = @intCast(row);
                     ray.DrawRectangle(

@@ -1,4 +1,7 @@
 const std = @import("std");
+const ray = @cImport({
+    @cInclude("raylib.h");
+});
 const instructions = @import("instructions.zig");
 const decode = instructions.decode;
 const Instruction = instructions.Instruction;
@@ -59,7 +62,20 @@ pub const CPU = struct {
         };
     }
 
+    pub fn tick(self: *CPU) !void {
+        try self.evaluate(self.loadInstruction());
+    }
+
+    pub fn loadInstruction(self: *CPU) u16 {
+        const msb = self.memory[self.program_counter];
+        const lsb = self.memory[self.program_counter + 1];
+        return (@as(u16, msb) << 8) | lsb;
+    }
+
     fn evaluate(self: *CPU, instruction: u16) !void {
+        if (instruction == 0x0000)
+            return;
+        ray.TraceLog(ray.LOG_INFO, "evaluate instruction at %03x: %04x", @as(c_int, self.program_counter), @as(c_int, instruction));
         switch (decode(instruction)) {
             Instruction.clear_screen => {
                 self.screen.clear();
@@ -78,26 +94,26 @@ pub const CPU = struct {
             Instruction.call_subroutine => |i| {
                 if (self.stack_index > 0xf)
                     return CPUError.StackOverflow;
-                self.stack[self.stack_index] = self.program_counter + 1;
+                self.stack[self.stack_index] = self.program_counter + 2;
                 self.stack_index += 1;
                 self.program_counter = i.address;
                 return;
             },
             Instruction.skip_if_equal_immediate => |i| {
                 if (self.registers[i.register] == i.value) {
-                    self.program_counter += 2;
+                    self.program_counter += 4;
                     return;
                 }
             },
             Instruction.skip_if_not_equal_immediate => |i| {
                 if (self.registers[i.register] != i.value) {
-                    self.program_counter += 2;
+                    self.program_counter += 4;
                     return;
                 }
             },
             Instruction.skip_if_equal => |i| {
                 if (self.registers[i.register[0]] == self.registers[i.register[1]]) {
-                    self.program_counter += 2;
+                    self.program_counter += 4;
                     return;
                 }
             },
@@ -154,7 +170,7 @@ pub const CPU = struct {
             },
             Instruction.skip_if_not_equal => |i| {
                 if (self.registers[i.register[0]] != self.registers[i.register[1]]) {
-                    self.program_counter += 2;
+                    self.program_counter += 4;
                     return;
                 }
             },
@@ -177,6 +193,10 @@ pub const CPU = struct {
                     self.registers[0xf] = 0x01;
                 } else {
                     self.registers[0xf] = 0x00;
+                }
+                ray.TraceLog(ray.LOG_INFO, "drawing to the screen");
+                for (self.memory[from..to]) |b| {
+                    ray.TraceLog(ray.LOG_INFO, "byte: %02x", b);
                 }
             },
             Instruction.skip_if_key_pressed => {
@@ -229,7 +249,7 @@ pub const CPU = struct {
             },
             Instruction.invalid => return CPUError.InvalidInstruction,
         }
-        self.program_counter += 1;
+        self.program_counter += 2;
     }
 };
 
@@ -242,7 +262,7 @@ test "evaluate 00e0 instruction" {
     screen.rows[0] = 0xffffffffffffffff;
     try cpu.evaluate(0x00e0);
     try std.testing.expect(screen.rows[0] == 0);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 1nnn instruction" {
@@ -274,12 +294,12 @@ test "evaluate 2nnn instruction" {
     // do 15 subroutine returns
     for (0..15) |_| {
         try cpu.evaluate(0x00ee);
-        try std.testing.expect(cpu.program_counter == 0xabd);
+        try std.testing.expect(cpu.program_counter == 0xabe);
     }
 
     // one final subroutine return
     try cpu.evaluate(0x00ee);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 
     // the next subroutine return should be a stack underflow
     try std.testing.expectError(CPUError.StackUnderflow, cpu.evaluate(0x00ee));
@@ -294,7 +314,7 @@ test "evaluate 3nnn instruction, no skip" {
 
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3112);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }
 
 test "evaluate 3nnn instruction, skip" {
@@ -306,7 +326,7 @@ test "evaluate 3nnn instruction, skip" {
 
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x3111);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 4nnn instruction, skip" {
@@ -318,7 +338,7 @@ test "evaluate 4nnn instruction, skip" {
 
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4112);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 4nnn instruction, no skip" {
@@ -330,7 +350,7 @@ test "evaluate 4nnn instruction, no skip" {
 
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x4111);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }
 
 test "evaluate 5nnn instruction, no skip" {
@@ -343,7 +363,7 @@ test "evaluate 5nnn instruction, no skip" {
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x5120);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 5nnn instruction, skip" {
@@ -356,7 +376,7 @@ test "evaluate 5nnn instruction, skip" {
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x5120);
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 6xnn instruction" {
@@ -368,7 +388,7 @@ test "evaluate 6xnn instruction" {
 
     try cpu.evaluate(0x6123);
     try std.testing.expect(cpu.registers[0x1] == 0x23);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate 7xnn instruction" {
@@ -386,7 +406,7 @@ test "evaluate 7xnn instruction" {
     try cpu.evaluate(0x71a0);
     try std.testing.expect(cpu.registers[0x1] == 0x08); // overflow
     try std.testing.expect(cpu.registers[0xf] == 0x00); // register F is not affected
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 8xy0 instruction" {
@@ -400,7 +420,7 @@ test "evaluate 8xy0 instruction" {
     try cpu.evaluate(0x6234);
     try cpu.evaluate(0x8120);
     try std.testing.expect(cpu.registers[0x1] == 0x34);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 8xy1 instruction" {
@@ -414,7 +434,7 @@ test "evaluate 8xy1 instruction" {
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8121);
     try std.testing.expect(cpu.registers[0x1] == 0x77);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 8xy2 instruction" {
@@ -428,7 +448,7 @@ test "evaluate 8xy2 instruction" {
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8122);
     try std.testing.expect(cpu.registers[0x1] == 0x11);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 8xy3 instruction" {
@@ -442,7 +462,7 @@ test "evaluate 8xy3 instruction" {
     try cpu.evaluate(0x6255);
     try cpu.evaluate(0x8123);
     try std.testing.expect(cpu.registers[0x1] == 0x66);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate 8xy4 instruction" {
@@ -458,13 +478,13 @@ test "evaluate 8xy4 instruction" {
     try cpu.evaluate(0x8124);
     try std.testing.expect(cpu.registers[0x1] == 0xe3);
     try std.testing.expect(cpu.registers[0xf] == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 
     // add with overflow
     try cpu.evaluate(0x8124);
     try std.testing.expect(cpu.registers[0x1] == 0x25);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 8xy5 instruction" {
@@ -480,7 +500,7 @@ test "evaluate 8xy5 instruction" {
     try cpu.evaluate(0x8125);
     try std.testing.expect(cpu.registers[0x1] == 0x5e);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 
     // subtraction with underflow: 0x43 - 0xa1
     try cpu.evaluate(0x6143);
@@ -488,7 +508,7 @@ test "evaluate 8xy5 instruction" {
     try cpu.evaluate(0x8125);
     try std.testing.expect(cpu.registers[0x1] == 0xa2);
     try std.testing.expect(cpu.registers[0xf] == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x206);
+    try std.testing.expect(cpu.program_counter == 0x20c);
 }
 
 test "evaluate 8xy6 instruction" {
@@ -504,7 +524,7 @@ test "evaluate 8xy6 instruction" {
     try std.testing.expect(cpu.registers[0x1] == 0x55);
     try std.testing.expect(cpu.registers[0x2] == 0xaa);
     try std.testing.expect(cpu.registers[0xf] == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 
     // right shift with lsb 1
     try cpu.evaluate(0x6255);
@@ -512,7 +532,7 @@ test "evaluate 8xy6 instruction" {
     try std.testing.expect(cpu.registers[0x1] == 0x2a);
     try std.testing.expect(cpu.registers[0x2] == 0x55);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 8xy7 instruction" {
@@ -528,7 +548,7 @@ test "evaluate 8xy7 instruction" {
     try cpu.evaluate(0x8127);
     try std.testing.expect(cpu.registers[0x1] == 0x5e);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 
     // subtraction with underflow: 0x43 - 0xa1
     try cpu.evaluate(0x61a1);
@@ -536,7 +556,7 @@ test "evaluate 8xy7 instruction" {
     try cpu.evaluate(0x8127);
     try std.testing.expect(cpu.registers[0x1] == 0xa2);
     try std.testing.expect(cpu.registers[0xf] == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x206);
+    try std.testing.expect(cpu.program_counter == 0x20c);
 }
 
 test "evaluate 8xye instruction" {
@@ -552,7 +572,7 @@ test "evaluate 8xye instruction" {
     try std.testing.expect(cpu.registers[0x1] == 0xaa);
     try std.testing.expect(cpu.registers[0x2] == 0x55);
     try std.testing.expect(cpu.registers[0xf] == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 
     // left shift with msb 1
     try cpu.evaluate(0x62aa);
@@ -560,7 +580,7 @@ test "evaluate 8xye instruction" {
     try std.testing.expect(cpu.registers[0x1] == 0x54);
     try std.testing.expect(cpu.registers[0x2] == 0xaa);
     try std.testing.expect(cpu.registers[0xf] == 0x01);
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 9nnn instruction, skip" {
@@ -573,7 +593,7 @@ test "evaluate 9nnn instruction, skip" {
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6212);
     try cpu.evaluate(0x9120);
-    try std.testing.expect(cpu.program_counter == 0x204);
+    try std.testing.expect(cpu.program_counter == 0x208);
 }
 
 test "evaluate 9nnn instruction, no skip" {
@@ -586,7 +606,7 @@ test "evaluate 9nnn instruction, no skip" {
     try cpu.evaluate(0x6111);
     try cpu.evaluate(0x6211);
     try cpu.evaluate(0x9120);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate annn instruction" {
@@ -598,7 +618,7 @@ test "evaluate annn instruction" {
 
     try cpu.evaluate(0xa123);
     try std.testing.expect(cpu.address_register == 0x123);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate bnnn instruction" {
@@ -611,7 +631,7 @@ test "evaluate bnnn instruction" {
     try cpu.evaluate(0x6023);
     try cpu.evaluate(0xb234);
     try std.testing.expect(cpu.address_register == 0x257);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }
 
 test "evaluate cxnn instruction" {
@@ -625,7 +645,7 @@ test "evaluate cxnn instruction" {
     cpu.registers[0xa] = 0x00;
     try cpu.evaluate(0xca0f);
     try std.testing.expect(cpu.registers[0xa] & 0xf0 == 0x00);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate dxyn instruction" {
@@ -658,7 +678,7 @@ test "evaluate fx1e instruction" {
     try cpu.evaluate(0x6abc);
     try cpu.evaluate(0xfa1e);
     try std.testing.expect(cpu.address_register == 0x1df);
-    try std.testing.expect(cpu.program_counter == 0x203);
+    try std.testing.expect(cpu.program_counter == 0x206);
 }
 
 test "evaluate fx29 instruction" {
@@ -671,7 +691,7 @@ test "evaluate fx29 instruction" {
     try cpu.evaluate(0x6a04);
     try cpu.evaluate(0xfa29);
     try std.testing.expect(cpu.address_register == 0x1c4);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }
 
 test "evaluate fx33 instruction" {
@@ -691,7 +711,7 @@ test "evaluate fx33 instruction" {
     try std.testing.expectEqual(0x2, memory[0xa00]);
     try std.testing.expectEqual(0x3, memory[0xa01]);
     try std.testing.expectEqual(0x4, memory[0xa02]);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 }
 
 test "evaluate fx55 instruction" {
@@ -707,7 +727,7 @@ test "evaluate fx55 instruction" {
     try cpu.evaluate(0xff55);
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, memory[0xa00..0xa10]);
     try std.testing.expectEqual(0xa10, cpu.address_register);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 
     // store registers 0 to 5
     cpu.address_register = 0xa00;
@@ -715,7 +735,7 @@ test "evaluate fx55 instruction" {
     try cpu.evaluate(0xf555);
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, memory[0xa00..0xa10]);
     try std.testing.expectEqual(0xa06, cpu.address_register);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }
 
 test "evaluate fx65 instruction" {
@@ -732,7 +752,7 @@ test "evaluate fx65 instruction" {
     try cpu.evaluate(0xff65);
     try std.testing.expectEqual([16]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, cpu.registers);
     try std.testing.expectEqual(0xa10, cpu.address_register);
-    try std.testing.expect(cpu.program_counter == 0x201);
+    try std.testing.expect(cpu.program_counter == 0x202);
 
     // load registers 0 to 5
     memory[0xa00] = 0x00;
@@ -755,5 +775,5 @@ test "evaluate fx65 instruction" {
     try cpu.evaluate(0xf565);
     try std.testing.expectEqual([16]u8{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, cpu.registers);
     try std.testing.expectEqual(0xa06, cpu.address_register);
-    try std.testing.expect(cpu.program_counter == 0x202);
+    try std.testing.expect(cpu.program_counter == 0x204);
 }

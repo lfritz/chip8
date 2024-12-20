@@ -10,17 +10,20 @@ pub const Computer = struct {
 
     pub fn init(allocator: std.mem.Allocator) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
-        var screen = Screen.init();
-        return Computer{
+        var computer = Computer{
             .allocator = allocator,
             .cpu = CPU.init(memory, &screen),
             .memory = memory,
-            .screen = screen,
+            .screen = screen, // TODO this makes a copy of 'screen'
         };
     }
 
     pub fn free(self: *Computer) void {
         self.allocator.free(self.memory);
+    }
+
+    pub fn tick(self: *Computer) !void {
+        try self.cpu.tick();
     }
 };
 

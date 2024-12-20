@@ -3,7 +3,73 @@ const std = @import("std");
 const ray = @cImport({
     @cInclude("raylib.h");
 });
+const cpu = @import("cpu.zig");
 const Computer = @import("computer.zig").Computer;
+
+const program =
+    \\ 600c f029 6100 6200 d125
+    \\ 600a f029 6105 d125
+    \\ 600f f029 610a d125
+    \\ 600e f029 610f d125
+    \\ 0000
+;
+
+pub const ParseError = error{
+    InvalidCharacter,
+    UnexpectedEnd,
+};
+
+fn parseHex(c: u8) !u4 {
+    if (c >= '0' and c <= '9')
+        return @intCast(c - '0');
+    if (c >= 'a' and c <= 'f')
+        return @intCast(c - 'a' + 0xa);
+    return ParseError.InvalidCharacter;
+}
+
+test "parseHex parses hex digits" {
+    try std.testing.expectEqual(0x0, try parseHex('0'));
+    try std.testing.expectEqual(0x5, try parseHex('5'));
+    try std.testing.expectEqual(0x9, try parseHex('9'));
+    try std.testing.expectEqual(0x1, try parseHex('1'));
+    try std.testing.expectEqual(0xc, try parseHex('c'));
+    try std.testing.expectEqual(0xf, try parseHex('f'));
+}
+
+fn loadProgram(code: []const u8, memory: []u8) !void {
+    var nybble: ?u8 = null;
+    var index: usize = 0;
+    for (code) |c| {
+        const h = parseHex(c) catch {
+            continue;
+        };
+        if (nybble == null) {
+            nybble = h;
+        } else {
+            const value = (nybble.? << 4) | h;
+            nybble = null;
+            memory[index] = value;
+            index += 1;
+        }
+    }
+    if (nybble != null)
+        return ParseError.UnexpectedEnd;
+}
+
+test "loadProgram loads valid program" {
+    var memory = [_]u8{0x00} ** 0xa;
+    try loadProgram("600c f029 6100 6200 d125", &memory);
+    try std.testing.expect(memory[0] == 0x60);
+    try std.testing.expect(memory[1] == 0x0c);
+    try std.testing.expect(memory[2] == 0xf0);
+    try std.testing.expect(memory[3] == 0x29);
+    try std.testing.expect(memory[4] == 0x61);
+    try std.testing.expect(memory[5] == 0x00);
+    try std.testing.expect(memory[6] == 0x62);
+    try std.testing.expect(memory[7] == 0x00);
+    try std.testing.expect(memory[8] == 0xd1);
+    try std.testing.expect(memory[9] == 0x25);
+}
 
 pub fn main() !void {
     const zoom = 5;
@@ -22,20 +88,7 @@ pub fn main() !void {
     var computer = try Computer.init(allocator);
     defer computer.free();
 
-    // draw an arrow in the top-left corner
-    var scr = computer.screen;
-    const sprite = [_]u8{
-        0b00001000,
-        0b00011100,
-        0b00111110,
-        0b01111111,
-        0b00011100,
-        0b00011100,
-        0b00011100,
-        0b00011100,
-        0b00011100,
-    };
-    _ = try scr.draw(0, 1, &sprite);
+    try loadProgram(program, computer.memory[0x200..]);
 
     ray.InitWindow(screen_width, screen_height, "CHIP-8");
     defer ray.CloseWindow();
@@ -43,6 +96,15 @@ pub fn main() !void {
     ray.SetTargetFPS(60);
 
     while (!ray.WindowShouldClose()) {
+        computer.tick() catch |err| {
+            if (err == cpu.CPUError.InvalidInstruction) {
+                const addr = computer.cpu.program_counter;
+                const i = computer.cpu.loadInstruction();
+                ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
+                return err;
+            }
+        };
+
         ray.BeginDrawing();
         defer ray.EndDrawing();
 
@@ -51,7 +113,7 @@ pub fn main() !void {
             for (0..width) |col| {
                 const x: u6 = @intCast(col);
                 const y: u6 = @intCast(row);
-                if (try scr.get(x, y)) {
+                if (try computer.screen.get(x, y)) {
                     const cx: c_int = @intCast(col);
                     const cy: c_int = @intCast(row);
                     ray.DrawRectangle(

@@ -84,7 +84,7 @@ pub fn main() !void {
     const screen_height = height << zoom;
 
     const allocator: std.mem.Allocator = std.heap.c_allocator;
-    var c = try computer.Computer.init(allocator);
+    var c = try computer.Computer.init(allocator, @intCast(std.time.timestamp()));
     defer c.free();
 
     try loadProgram(program, c.memory[0x200..]);

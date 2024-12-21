@@ -41,11 +41,13 @@ pub const Computer = struct {
     program_counter: u12,
     memory: []u8,
     screen: Screen,
+    prng: std.Random.Xoshiro256,
     random: std.Random,
 
-    pub fn init(allocator: std.mem.Allocator) !Computer {
+    pub fn init(allocator: std.mem.Allocator, randomSeed: u64) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
-        var prng = std.Random.DefaultPrng.init(0);
+        var prng = std.Random.Xoshiro256.init(randomSeed);
+        const random = prng.random();
         for (font, 0..) |value, index| {
             memory[font_start + index] = value;
         }
@@ -58,7 +60,8 @@ pub const Computer = struct {
             .program_counter = program_start,
             .memory = memory,
             .screen = Screen.init(),
-            .random = prng.random(),
+            .prng = prng,
+            .random = random,
         };
     }
 
@@ -253,12 +256,12 @@ pub const Computer = struct {
 };
 
 test "init and free Computer" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     computer.free();
 }
 
 test "evaluate 00e0 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     computer.screen.rows[0] = 0xffffffffffffffff;
@@ -268,7 +271,7 @@ test "evaluate 00e0 instruction" {
 }
 
 test "evaluate 1nnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x1abc);
@@ -276,7 +279,7 @@ test "evaluate 1nnn instruction" {
 }
 
 test "evaluate 2nnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // do 16 subroutine calls
@@ -303,7 +306,7 @@ test "evaluate 2nnn instruction" {
 }
 
 test "evaluate 3nnn instruction, no skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -312,7 +315,7 @@ test "evaluate 3nnn instruction, no skip" {
 }
 
 test "evaluate 3nnn instruction, skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -321,7 +324,7 @@ test "evaluate 3nnn instruction, skip" {
 }
 
 test "evaluate 4nnn instruction, skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -330,7 +333,7 @@ test "evaluate 4nnn instruction, skip" {
 }
 
 test "evaluate 4nnn instruction, no skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -339,7 +342,7 @@ test "evaluate 4nnn instruction, no skip" {
 }
 
 test "evaluate 5nnn instruction, no skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -349,7 +352,7 @@ test "evaluate 5nnn instruction, no skip" {
 }
 
 test "evaluate 5nnn instruction, skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -359,7 +362,7 @@ test "evaluate 5nnn instruction, skip" {
 }
 
 test "evaluate 6xnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6123);
@@ -368,7 +371,7 @@ test "evaluate 6xnn instruction" {
 }
 
 test "evaluate 7xnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6f00); // clear register F
@@ -383,7 +386,7 @@ test "evaluate 7xnn instruction" {
 }
 
 test "evaluate 8xy0 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6123);
@@ -394,7 +397,7 @@ test "evaluate 8xy0 instruction" {
 }
 
 test "evaluate 8xy1 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6133);
@@ -405,7 +408,7 @@ test "evaluate 8xy1 instruction" {
 }
 
 test "evaluate 8xy2 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6133);
@@ -416,7 +419,7 @@ test "evaluate 8xy2 instruction" {
 }
 
 test "evaluate 8xy3 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6133);
@@ -427,7 +430,7 @@ test "evaluate 8xy3 instruction" {
 }
 
 test "evaluate 8xy4 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // add
@@ -446,7 +449,7 @@ test "evaluate 8xy4 instruction" {
 }
 
 test "evaluate 8xy5 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // subtraction: 0xa1 - 0x43
@@ -467,7 +470,7 @@ test "evaluate 8xy5 instruction" {
 }
 
 test "evaluate 8xy6 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // right shift with lsb 0
@@ -488,7 +491,7 @@ test "evaluate 8xy6 instruction" {
 }
 
 test "evaluate 8xy7 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // subtraction: 0xa1 - 0x42
@@ -509,7 +512,7 @@ test "evaluate 8xy7 instruction" {
 }
 
 test "evaluate 8xye instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // left shift with msb 0
@@ -530,7 +533,7 @@ test "evaluate 8xye instruction" {
 }
 
 test "evaluate 9nnn instruction, skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -540,7 +543,7 @@ test "evaluate 9nnn instruction, skip" {
 }
 
 test "evaluate 9nnn instruction, no skip" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6111);
@@ -550,7 +553,7 @@ test "evaluate 9nnn instruction, no skip" {
 }
 
 test "evaluate annn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0xa123);
@@ -559,7 +562,7 @@ test "evaluate annn instruction" {
 }
 
 test "evaluate bnnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6023);
@@ -569,18 +572,31 @@ test "evaluate bnnn instruction" {
 }
 
 test "evaluate cxnn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    const seed = 0;
+    var computer = try Computer.init(std.testing.allocator, seed);
     defer computer.free();
 
-    // this only tests that the bitmask works
+    var prng = std.Random.Xoshiro256.init(seed);
+    const random = prng.random();
+
+    computer.registers[0xa] = 0x00;
+    try computer.evaluate(0xcaff);
+    try std.testing.expect(computer.registers[0xa] == random.int(u8));
+    try std.testing.expect(computer.program_counter == 0x202);
+
     computer.registers[0xa] = 0x00;
     try computer.evaluate(0xca0f);
-    try std.testing.expect(computer.registers[0xa] & 0xf0 == 0x00);
-    try std.testing.expect(computer.program_counter == 0x202);
+    try std.testing.expect(computer.registers[0xa] == (random.int(u8) & 0x0f));
+    try std.testing.expect(computer.program_counter == 0x204);
+
+    computer.registers[0xa] = 0x00;
+    try computer.evaluate(0xcaf0);
+    try std.testing.expect(computer.registers[0xa] == (random.int(u8) & 0xf0));
+    try std.testing.expect(computer.program_counter == 0x206);
 }
 
 test "evaluate dxyn instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // define a 1-byte sprite
@@ -596,7 +612,7 @@ test "evaluate dxyn instruction" {
 }
 
 test "evaluate fx1e instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0xa123);
@@ -607,7 +623,7 @@ test "evaluate fx1e instruction" {
 }
 
 test "evaluate fx29 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     try computer.evaluate(0x6a04);
@@ -617,7 +633,7 @@ test "evaluate fx29 instruction" {
 }
 
 test "evaluate fx33 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     computer.memory[0xa00] = 0x00;
@@ -634,7 +650,7 @@ test "evaluate fx33 instruction" {
 }
 
 test "evaluate fx55 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // store 16 zeros
@@ -655,7 +671,7 @@ test "evaluate fx55 instruction" {
 }
 
 test "evaluate fx65 instruction" {
-    var computer = try Computer.init(std.testing.allocator);
+    var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
     // load 16 zeros

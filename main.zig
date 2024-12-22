@@ -66,6 +66,25 @@ test "loadProgram loads valid program" {
     try std.testing.expect(memory[9] == 0x25);
 }
 
+const all_keys = [_]c_int{
+    ray.KEY_ZERO,
+    ray.KEY_ONE,
+    ray.KEY_TWO,
+    ray.KEY_THREE,
+    ray.KEY_FOUR,
+    ray.KEY_FIVE,
+    ray.KEY_SIX,
+    ray.KEY_SEVEN,
+    ray.KEY_EIGHT,
+    ray.KEY_NINE,
+    ray.KEY_A,
+    ray.KEY_B,
+    ray.KEY_C,
+    ray.KEY_D,
+    ray.KEY_E,
+    ray.KEY_F,
+};
+
 pub fn main() !void {
     const zoom = 5;
     const width = 0x40;
@@ -92,38 +111,12 @@ pub fn main() !void {
 
     while (!ray.WindowShouldClose()) {
         var keys: u16 = 0;
-        if (ray.IsKeyDown(ray.KEY_ZERO))
-            keys |= (1 << 0x0);
-        if (ray.IsKeyDown(ray.KEY_ONE))
-            keys |= (1 << 0x1);
-        if (ray.IsKeyDown(ray.KEY_TWO))
-            keys |= (1 << 0x2);
-        if (ray.IsKeyDown(ray.KEY_THREE))
-            keys |= (1 << 0x3);
-        if (ray.IsKeyDown(ray.KEY_FOUR))
-            keys |= (1 << 0x4);
-        if (ray.IsKeyDown(ray.KEY_FIVE))
-            keys |= (1 << 0x5);
-        if (ray.IsKeyDown(ray.KEY_SIX))
-            keys |= (1 << 0x6);
-        if (ray.IsKeyDown(ray.KEY_SEVEN))
-            keys |= (1 << 0x7);
-        if (ray.IsKeyDown(ray.KEY_EIGHT))
-            keys |= (1 << 0x8);
-        if (ray.IsKeyDown(ray.KEY_NINE))
-            keys |= (1 << 0x9);
-        if (ray.IsKeyDown(ray.KEY_A))
-            keys |= (1 << 0xa);
-        if (ray.IsKeyDown(ray.KEY_B))
-            keys |= (1 << 0xb);
-        if (ray.IsKeyDown(ray.KEY_C))
-            keys |= (1 << 0xc);
-        if (ray.IsKeyDown(ray.KEY_D))
-            keys |= (1 << 0xd);
-        if (ray.IsKeyDown(ray.KEY_E))
-            keys |= (1 << 0xe);
-        if (ray.IsKeyDown(ray.KEY_F))
-            keys |= (1 << 0xf);
+        for (all_keys, 0..) |k, i| {
+            if (ray.IsKeyDown(k)) {
+                keys |= (@as(u16, 1) << @intCast(i));
+                break;
+            }
+        }
 
         c.tick(keys) catch |err| {
             if (err == computer.Error.InvalidInstruction) {

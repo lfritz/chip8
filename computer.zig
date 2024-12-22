@@ -44,6 +44,8 @@ pub const Computer = struct {
     screen: Screen,
     prng: std.Random.Xoshiro256,
     wait_for_key: ?u4,
+    delay_timer: u8,
+    sound_timer: u8,
 
     pub fn init(allocator: std.mem.Allocator, randomSeed: u64) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
@@ -62,6 +64,8 @@ pub const Computer = struct {
             .screen = Screen.init(),
             .prng = prng,
             .wait_for_key = null,
+            .delay_timer = 0,
+            .sound_timer = 0,
         };
     }
 
@@ -82,6 +86,10 @@ pub const Computer = struct {
     fn evaluate(self: *Computer, instruction: u16, keys: u16) !void {
         if (instruction == 0x0000)
             return;
+        if (self.delay_timer != 0)
+            self.delay_timer -= 1;
+        if (self.sound_timer != 0)
+            self.sound_timer -= 1;
         if (self.wait_for_key) |register| {
             if (keys == 0x00)
                 return;
@@ -233,17 +241,17 @@ pub const Computer = struct {
                     return;
                 }
             },
-            Instruction.get_delay_timer => {
-                unreachable; // TODO implement get delay timer
+            Instruction.get_delay_timer => |i| {
+                self.registers[i.register] = self.delay_timer;
             },
             Instruction.wait_for_key => |i| {
                 self.wait_for_key = i.register;
             },
-            Instruction.set_delay_timer => {
-                unreachable; // TODO implement set delay timer
+            Instruction.set_delay_timer => |i| {
+                self.delay_timer = self.registers[i.register];
             },
-            Instruction.set_sound_timer => {
-                unreachable; // TODO implement set sound timer
+            Instruction.set_sound_timer => |i| {
+                self.sound_timer = self.registers[i.register];
             },
             Instruction.add_address => |i| {
                 self.address_register +%= self.registers[i.register];
@@ -710,6 +718,35 @@ test "evaluate fx0a instruction" {
     try std.testing.expect(computer.registers[0xa] == 0x02);
     try std.testing.expect(computer.registers[0xb] == 0x01);
     try std.testing.expect(computer.program_counter == 0x204);
+}
+
+test "set and get delay timer" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    try computer.evaluate(0xfb07, 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x00);
+    try std.testing.expect(computer.program_counter == 0x202);
+
+    computer.registers[0xa] = 0x03;
+    try computer.evaluate(0xfa15, 0x00);
+    try std.testing.expect(computer.program_counter == 0x204);
+
+    try computer.evaluate(0xfb07, 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x02);
+    try std.testing.expect(computer.program_counter == 0x206);
+
+    try computer.evaluate(0xfb07, 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x01);
+    try std.testing.expect(computer.program_counter == 0x208);
+
+    try computer.evaluate(0xfb07, 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x00);
+    try std.testing.expect(computer.program_counter == 0x20a);
+
+    try computer.evaluate(0xfb07, 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x00);
+    try std.testing.expect(computer.program_counter == 0x20c);
 }
 
 test "evaluate fx1e instruction" {

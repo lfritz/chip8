@@ -42,12 +42,10 @@ pub const Computer = struct {
     memory: []u8,
     screen: Screen,
     prng: std.Random.Xoshiro256,
-    random: std.Random,
 
     pub fn init(allocator: std.mem.Allocator, randomSeed: u64) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
-        var prng = std.Random.Xoshiro256.init(randomSeed);
-        const random = prng.random();
+        const prng = std.Random.Xoshiro256.init(randomSeed);
         for (font, 0..) |value, index| {
             memory[font_start + index] = value;
         }
@@ -61,7 +59,6 @@ pub const Computer = struct {
             .memory = memory,
             .screen = Screen.init(),
             .prng = prng,
-            .random = random,
         };
     }
 
@@ -187,7 +184,8 @@ pub const Computer = struct {
                 self.address_register = i.address +% self.registers[0];
             },
             Instruction.rand => |i| {
-                self.registers[i.register] = self.random.int(u8) & i.bitmask;
+                const random = self.prng.random();
+                self.registers[i.register] = random.int(u8) & i.bitmask;
             },
             Instruction.sprite => |i| {
                 const x = self.registers[i.register_x];

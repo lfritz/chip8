@@ -73,6 +73,10 @@ pub const Computer = struct {
         self.allocator.free(self.memory);
     }
 
+    pub fn sound(self: *Computer) bool {
+        return self.sound_timer > 0;
+    }
+
     pub fn tick(self: *Computer, keys: u16) !void {
         try self.evaluate(self.loadInstruction(), keys);
     }

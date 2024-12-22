@@ -6,7 +6,10 @@ const ray = @cImport({
 const computer = @import("computer.zig");
 
 const program =
-    \\ f00a 00e0 f029 d225 1200
+    \\ 613c 6200
+    \\ f00a 3001 120e
+    \\ f118 1204
+    \\ f218 1204
 ;
 
 pub const ParseError = error{
@@ -102,9 +105,11 @@ pub fn main() !void {
     var c = try computer.Computer.init(allocator, @intCast(std.time.timestamp()));
     defer c.free();
 
+    var sound = false;
+
     try loadProgram(program, c.memory[0x200..]);
 
-    ray.InitWindow(screen_width, screen_height, "CHIP-8");
+    ray.InitWindow(screen_width, screen_height, title(sound));
     defer ray.CloseWindow();
 
     ray.SetTargetFPS(60);
@@ -126,6 +131,11 @@ pub fn main() !void {
                 return err;
             }
         };
+
+        if (c.sound() != sound) {
+            sound = !sound;
+            ray.SetWindowTitle(title(sound));
+        }
 
         ray.BeginDrawing();
         defer ray.EndDrawing();
@@ -149,4 +159,11 @@ pub fn main() !void {
             }
         }
     }
+}
+
+fn title(sound: bool) [*:0]const u8 {
+    if (sound) {
+        return "🔔 CHIP-8 🔔";
+    }
+    return "CHIP-8";
 }

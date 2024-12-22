@@ -6,11 +6,7 @@ const ray = @cImport({
 const computer = @import("computer.zig");
 
 const program =
-    \\ 600c f029 6100 6200 d125
-    \\ 600a f029 6105 d125
-    \\ 600f f029 610a d125
-    \\ 600e f029 610f d125
-    \\ 0000
+    \\ f00a 00e0 f029 d225 1200
 ;
 
 pub const ParseError = error{
@@ -95,7 +91,41 @@ pub fn main() !void {
     ray.SetTargetFPS(60);
 
     while (!ray.WindowShouldClose()) {
-        c.tick() catch |err| {
+        var keys: u16 = 0;
+        if (ray.IsKeyDown(ray.KEY_ZERO))
+            keys |= (1 << 0x0);
+        if (ray.IsKeyDown(ray.KEY_ONE))
+            keys |= (1 << 0x1);
+        if (ray.IsKeyDown(ray.KEY_TWO))
+            keys |= (1 << 0x2);
+        if (ray.IsKeyDown(ray.KEY_THREE))
+            keys |= (1 << 0x3);
+        if (ray.IsKeyDown(ray.KEY_FOUR))
+            keys |= (1 << 0x4);
+        if (ray.IsKeyDown(ray.KEY_FIVE))
+            keys |= (1 << 0x5);
+        if (ray.IsKeyDown(ray.KEY_SIX))
+            keys |= (1 << 0x6);
+        if (ray.IsKeyDown(ray.KEY_SEVEN))
+            keys |= (1 << 0x7);
+        if (ray.IsKeyDown(ray.KEY_EIGHT))
+            keys |= (1 << 0x8);
+        if (ray.IsKeyDown(ray.KEY_NINE))
+            keys |= (1 << 0x9);
+        if (ray.IsKeyDown(ray.KEY_A))
+            keys |= (1 << 0xa);
+        if (ray.IsKeyDown(ray.KEY_B))
+            keys |= (1 << 0xb);
+        if (ray.IsKeyDown(ray.KEY_C))
+            keys |= (1 << 0xc);
+        if (ray.IsKeyDown(ray.KEY_D))
+            keys |= (1 << 0xd);
+        if (ray.IsKeyDown(ray.KEY_E))
+            keys |= (1 << 0xe);
+        if (ray.IsKeyDown(ray.KEY_F))
+            keys |= (1 << 0xf);
+
+        c.tick(keys) catch |err| {
             if (err == computer.Error.InvalidInstruction) {
                 const addr = c.program_counter;
                 const i = c.loadInstruction();

@@ -30,6 +30,7 @@ pub const Error = error{
     InvalidInstruction,
     StackOverflow,
     StackUnderflow,
+    InvalidKey,
 };
 
 pub const Computer = struct {
@@ -42,6 +43,7 @@ pub const Computer = struct {
     memory: []u8,
     screen: Screen,
     prng: std.Random.Xoshiro256,
+    wait_for_key: ?u4,
 
     pub fn init(allocator: std.mem.Allocator, randomSeed: u64) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
@@ -59,6 +61,7 @@ pub const Computer = struct {
             .memory = memory,
             .screen = Screen.init(),
             .prng = prng,
+            .wait_for_key = null,
         };
     }
 
@@ -66,8 +69,8 @@ pub const Computer = struct {
         self.allocator.free(self.memory);
     }
 
-    pub fn tick(self: *Computer) !void {
-        try self.evaluate(self.loadInstruction());
+    pub fn tick(self: *Computer, keys: u16) !void {
+        try self.evaluate(self.loadInstruction(), keys);
     }
 
     pub fn loadInstruction(self: *Computer) u16 {
@@ -76,9 +79,20 @@ pub const Computer = struct {
         return (@as(u16, msb) << 8) | lsb;
     }
 
-    fn evaluate(self: *Computer, instruction: u16) !void {
+    fn evaluate(self: *Computer, instruction: u16, keys: u16) !void {
         if (instruction == 0x0000)
             return;
+        if (self.wait_for_key) |register| {
+            if (keys == 0x00)
+                return;
+            for (0..0x10) |key| {
+                if (keys & (@as(u16, 1) << @intCast(key)) != 0x00) {
+                    self.registers[register] = @intCast(key);
+                    break;
+                }
+            }
+            self.wait_for_key = null;
+        }
         switch (decode(instruction)) {
             Instruction.clear_screen => {
                 self.screen.clear();
@@ -199,17 +213,31 @@ pub const Computer = struct {
                     self.registers[0xf] = 0x00;
                 }
             },
-            Instruction.skip_if_key_pressed => {
-                unreachable; // TODO implement skip if key pressed
+            Instruction.skip_if_key_pressed => |i| {
+                const key: u8 = self.registers[i.register];
+                if (key > 0x0f)
+                    return Error.InvalidKey;
+                const key4: u4 = @intCast(key);
+                if (keys & (@as(u16, 1) << key4) != 0) {
+                    self.program_counter += 4;
+                    return;
+                }
             },
-            Instruction.skip_if_key_not_pressed => {
-                unreachable; // TODO implement skip if key not pressed
+            Instruction.skip_if_key_not_pressed => |i| {
+                const key: u8 = self.registers[i.register];
+                if (key > 0x0f)
+                    return Error.InvalidKey;
+                const key4: u4 = @intCast(key);
+                if (keys & (@as(u16, 1) << key4) == 0) {
+                    self.program_counter += 4;
+                    return;
+                }
             },
             Instruction.get_delay_timer => {
                 unreachable; // TODO implement get delay timer
             },
-            Instruction.wait_for_key => {
-                unreachable; // TODO implement wait for key
+            Instruction.wait_for_key => |i| {
+                self.wait_for_key = i.register;
             },
             Instruction.set_delay_timer => {
                 unreachable; // TODO implement set delay timer
@@ -263,7 +291,7 @@ test "evaluate 00e0 instruction" {
     defer computer.free();
 
     computer.screen.rows[0] = 0xffffffffffffffff;
-    try computer.evaluate(0x00e0);
+    try computer.evaluate(0x00e0, 0x00);
     try std.testing.expect(computer.screen.rows[0] == 0);
     try std.testing.expect(computer.program_counter == 0x202);
 }
@@ -272,7 +300,7 @@ test "evaluate 1nnn instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x1abc);
+    try computer.evaluate(0x1abc, 0x00);
     try std.testing.expect(computer.program_counter == 0xabc);
 }
 
@@ -282,33 +310,33 @@ test "evaluate 2nnn instruction" {
 
     // do 16 subroutine calls
     for (0..16) |_| {
-        try computer.evaluate(0x2abc);
+        try computer.evaluate(0x2abc, 0x00);
         try std.testing.expect(computer.program_counter == 0xabc);
     }
 
     // the next subroutine call should be a stack overflow
-    try std.testing.expectError(Error.StackOverflow, computer.evaluate(0x2abc));
+    try std.testing.expectError(Error.StackOverflow, computer.evaluate(0x2abc, 0x00));
 
     // do 15 subroutine returns
     for (0..15) |_| {
-        try computer.evaluate(0x00ee);
+        try computer.evaluate(0x00ee, 0x00);
         try std.testing.expect(computer.program_counter == 0xabe);
     }
 
     // one final subroutine return
-    try computer.evaluate(0x00ee);
+    try computer.evaluate(0x00ee, 0x00);
     try std.testing.expect(computer.program_counter == 0x202);
 
     // the next subroutine return should be a stack underflow
-    try std.testing.expectError(Error.StackUnderflow, computer.evaluate(0x00ee));
+    try std.testing.expectError(Error.StackUnderflow, computer.evaluate(0x00ee, 0x00));
 }
 
 test "evaluate 3nnn instruction, no skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x3112);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x3112, 0x00);
     try std.testing.expect(computer.program_counter == 0x204);
 }
 
@@ -316,8 +344,8 @@ test "evaluate 3nnn instruction, skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x3111);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x3111, 0x00);
     try std.testing.expect(computer.program_counter == 0x206);
 }
 
@@ -325,8 +353,8 @@ test "evaluate 4nnn instruction, skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x4112);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x4112, 0x00);
     try std.testing.expect(computer.program_counter == 0x206);
 }
 
@@ -334,8 +362,8 @@ test "evaluate 4nnn instruction, no skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x4111);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x4111, 0x00);
     try std.testing.expect(computer.program_counter == 0x204);
 }
 
@@ -343,9 +371,9 @@ test "evaluate 5nnn instruction, no skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x6212);
-    try computer.evaluate(0x5120);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x6212, 0x00);
+    try computer.evaluate(0x5120, 0x00);
     try std.testing.expect(computer.program_counter == 0x206);
 }
 
@@ -353,9 +381,9 @@ test "evaluate 5nnn instruction, skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x6211);
-    try computer.evaluate(0x5120);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x6211, 0x00);
+    try computer.evaluate(0x5120, 0x00);
     try std.testing.expect(computer.program_counter == 0x208);
 }
 
@@ -363,7 +391,7 @@ test "evaluate 6xnn instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6123);
+    try computer.evaluate(0x6123, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x23);
     try std.testing.expect(computer.program_counter == 0x202);
 }
@@ -372,12 +400,12 @@ test "evaluate 7xnn instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6f00); // clear register F
-    try computer.evaluate(0x6123);
+    try computer.evaluate(0x6f00, 0x00); // clear register F
+    try computer.evaluate(0x6123, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x23);
-    try computer.evaluate(0x7145);
+    try computer.evaluate(0x7145, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x68);
-    try computer.evaluate(0x71a0);
+    try computer.evaluate(0x71a0, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x08); // overflow
     try std.testing.expect(computer.registers[0xf] == 0x00); // register F is not affected
     try std.testing.expect(computer.program_counter == 0x208);
@@ -387,9 +415,9 @@ test "evaluate 8xy0 instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6123);
-    try computer.evaluate(0x6234);
-    try computer.evaluate(0x8120);
+    try computer.evaluate(0x6123, 0x00);
+    try computer.evaluate(0x6234, 0x00);
+    try computer.evaluate(0x8120, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x34);
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -398,9 +426,9 @@ test "evaluate 8xy1 instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6133);
-    try computer.evaluate(0x6255);
-    try computer.evaluate(0x8121);
+    try computer.evaluate(0x6133, 0x00);
+    try computer.evaluate(0x6255, 0x00);
+    try computer.evaluate(0x8121, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x77);
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -409,9 +437,9 @@ test "evaluate 8xy2 instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6133);
-    try computer.evaluate(0x6255);
-    try computer.evaluate(0x8122);
+    try computer.evaluate(0x6133, 0x00);
+    try computer.evaluate(0x6255, 0x00);
+    try computer.evaluate(0x8122, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x11);
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -420,9 +448,9 @@ test "evaluate 8xy3 instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6133);
-    try computer.evaluate(0x6255);
-    try computer.evaluate(0x8123);
+    try computer.evaluate(0x6133, 0x00);
+    try computer.evaluate(0x6255, 0x00);
+    try computer.evaluate(0x8123, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x66);
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -432,15 +460,15 @@ test "evaluate 8xy4 instruction" {
     defer computer.free();
 
     // add
-    try computer.evaluate(0x61a1);
-    try computer.evaluate(0x6242);
-    try computer.evaluate(0x8124);
+    try computer.evaluate(0x61a1, 0x00);
+    try computer.evaluate(0x6242, 0x00);
+    try computer.evaluate(0x8124, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0xe3);
     try std.testing.expect(computer.registers[0xf] == 0x00);
     try std.testing.expect(computer.program_counter == 0x206);
 
     // add with overflow
-    try computer.evaluate(0x8124);
+    try computer.evaluate(0x8124, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x25);
     try std.testing.expect(computer.registers[0xf] == 0x01);
     try std.testing.expect(computer.program_counter == 0x208);
@@ -451,17 +479,17 @@ test "evaluate 8xy5 instruction" {
     defer computer.free();
 
     // subtraction: 0xa1 - 0x43
-    try computer.evaluate(0x61a1);
-    try computer.evaluate(0x6243);
-    try computer.evaluate(0x8125);
+    try computer.evaluate(0x61a1, 0x00);
+    try computer.evaluate(0x6243, 0x00);
+    try computer.evaluate(0x8125, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x5e);
     try std.testing.expect(computer.registers[0xf] == 0x01);
     try std.testing.expect(computer.program_counter == 0x206);
 
     // subtraction with underflow: 0x43 - 0xa1
-    try computer.evaluate(0x6143);
-    try computer.evaluate(0x62a1);
-    try computer.evaluate(0x8125);
+    try computer.evaluate(0x6143, 0x00);
+    try computer.evaluate(0x62a1, 0x00);
+    try computer.evaluate(0x8125, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0xa2);
     try std.testing.expect(computer.registers[0xf] == 0x00);
     try std.testing.expect(computer.program_counter == 0x20c);
@@ -472,16 +500,16 @@ test "evaluate 8xy6 instruction" {
     defer computer.free();
 
     // right shift with lsb 0
-    try computer.evaluate(0x62aa);
-    try computer.evaluate(0x8126);
+    try computer.evaluate(0x62aa, 0x00);
+    try computer.evaluate(0x8126, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x55);
     try std.testing.expect(computer.registers[0x2] == 0xaa);
     try std.testing.expect(computer.registers[0xf] == 0x00);
     try std.testing.expect(computer.program_counter == 0x204);
 
     // right shift with lsb 1
-    try computer.evaluate(0x6255);
-    try computer.evaluate(0x8126);
+    try computer.evaluate(0x6255, 0x00);
+    try computer.evaluate(0x8126, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x2a);
     try std.testing.expect(computer.registers[0x2] == 0x55);
     try std.testing.expect(computer.registers[0xf] == 0x01);
@@ -493,17 +521,17 @@ test "evaluate 8xy7 instruction" {
     defer computer.free();
 
     // subtraction: 0xa1 - 0x42
-    try computer.evaluate(0x6143);
-    try computer.evaluate(0x62a1);
-    try computer.evaluate(0x8127);
+    try computer.evaluate(0x6143, 0x00);
+    try computer.evaluate(0x62a1, 0x00);
+    try computer.evaluate(0x8127, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x5e);
     try std.testing.expect(computer.registers[0xf] == 0x01);
     try std.testing.expect(computer.program_counter == 0x206);
 
     // subtraction with underflow: 0x43 - 0xa1
-    try computer.evaluate(0x61a1);
-    try computer.evaluate(0x6243);
-    try computer.evaluate(0x8127);
+    try computer.evaluate(0x61a1, 0x00);
+    try computer.evaluate(0x6243, 0x00);
+    try computer.evaluate(0x8127, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0xa2);
     try std.testing.expect(computer.registers[0xf] == 0x00);
     try std.testing.expect(computer.program_counter == 0x20c);
@@ -514,16 +542,16 @@ test "evaluate 8xye instruction" {
     defer computer.free();
 
     // left shift with msb 0
-    try computer.evaluate(0x6255);
-    try computer.evaluate(0x812e);
+    try computer.evaluate(0x6255, 0x00);
+    try computer.evaluate(0x812e, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0xaa);
     try std.testing.expect(computer.registers[0x2] == 0x55);
     try std.testing.expect(computer.registers[0xf] == 0x00);
     try std.testing.expect(computer.program_counter == 0x204);
 
     // left shift with msb 1
-    try computer.evaluate(0x62aa);
-    try computer.evaluate(0x812e);
+    try computer.evaluate(0x62aa, 0x00);
+    try computer.evaluate(0x812e, 0x00);
     try std.testing.expect(computer.registers[0x1] == 0x54);
     try std.testing.expect(computer.registers[0x2] == 0xaa);
     try std.testing.expect(computer.registers[0xf] == 0x01);
@@ -534,9 +562,9 @@ test "evaluate 9nnn instruction, skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x6212);
-    try computer.evaluate(0x9120);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x6212, 0x00);
+    try computer.evaluate(0x9120, 0x00);
     try std.testing.expect(computer.program_counter == 0x208);
 }
 
@@ -544,9 +572,9 @@ test "evaluate 9nnn instruction, no skip" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6111);
-    try computer.evaluate(0x6211);
-    try computer.evaluate(0x9120);
+    try computer.evaluate(0x6111, 0x00);
+    try computer.evaluate(0x6211, 0x00);
+    try computer.evaluate(0x9120, 0x00);
     try std.testing.expect(computer.program_counter == 0x206);
 }
 
@@ -554,7 +582,7 @@ test "evaluate annn instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0xa123);
+    try computer.evaluate(0xa123, 0x00);
     try std.testing.expect(computer.address_register == 0x123);
     try std.testing.expect(computer.program_counter == 0x202);
 }
@@ -563,8 +591,8 @@ test "evaluate bnnn instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6023);
-    try computer.evaluate(0xb234);
+    try computer.evaluate(0x6023, 0x00);
+    try computer.evaluate(0xb234, 0x00);
     try std.testing.expect(computer.address_register == 0x257);
     try std.testing.expect(computer.program_counter == 0x204);
 }
@@ -578,17 +606,17 @@ test "evaluate cxnn instruction" {
     const random = prng.random();
 
     computer.registers[0xa] = 0x00;
-    try computer.evaluate(0xcaff);
+    try computer.evaluate(0xcaff, 0x00);
     try std.testing.expect(computer.registers[0xa] == random.int(u8));
     try std.testing.expect(computer.program_counter == 0x202);
 
     computer.registers[0xa] = 0x00;
-    try computer.evaluate(0xca0f);
+    try computer.evaluate(0xca0f, 0x00);
     try std.testing.expect(computer.registers[0xa] == (random.int(u8) & 0x0f));
     try std.testing.expect(computer.program_counter == 0x204);
 
     computer.registers[0xa] = 0x00;
-    try computer.evaluate(0xcaf0);
+    try computer.evaluate(0xcaf0, 0x00);
     try std.testing.expect(computer.registers[0xa] == (random.int(u8) & 0xf0));
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -604,18 +632,93 @@ test "evaluate dxyn instruction" {
     // draw the sprite in the bottom-right corner of the screen
     computer.registers[0xa] = 0x38;
     computer.registers[0xb] = 0x1f;
-    try computer.evaluate(0xdab1);
+    try computer.evaluate(0xdab1, 0x00);
 
     try std.testing.expect(computer.screen.rows[0x1f] == 0x000000000000005a);
+}
+
+test "evaluate ex9e instruction, skip" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x4;
+    try computer.evaluate(0xea9e, 0b0000000000010000);
+    try std.testing.expect(computer.program_counter == 0x204);
+}
+
+test "evaluate ex9e instruction, no skip" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x4;
+    try computer.evaluate(0xea9e, 0b1111111111101111);
+    try std.testing.expect(computer.program_counter == 0x202);
+}
+
+test "evaluate ex9e instruction, invalid key" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x10;
+    try std.testing.expectError(Error.InvalidKey, computer.evaluate(0xea9e, 0b0000000000010000));
+}
+
+test "evaluate exa1 instruction, skip" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x04;
+    try computer.evaluate(0xeaa1, 0b1111111111101111);
+    try std.testing.expect(computer.program_counter == 0x204);
+}
+
+test "evaluate exa1 instruction, no skip" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x04;
+    try computer.evaluate(0xeaa1, 0b0000000000010000);
+    try std.testing.expect(computer.program_counter == 0x202);
+}
+
+test "evaluate exa1 instruction, invalid key" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    computer.registers[0xa] = 0x10;
+    try std.testing.expectError(Error.InvalidKey, computer.evaluate(0xeaa1, 0b0000000000010000));
+}
+
+test "evaluate fx0a instruction" {
+    var computer = try Computer.init(std.testing.allocator, 0);
+    defer computer.free();
+
+    // wait for key
+    computer.registers[0xa] = 0x00;
+    computer.registers[0xb] = 0x00;
+    try computer.evaluate(0xfa0a, 0b0000000000000000);
+    try std.testing.expect(computer.program_counter == 0x202);
+
+    // no key pressed, nothing happens
+    try computer.evaluate(0x6b01, 0b0000000000000000);
+    try std.testing.expect(computer.registers[0xa] == 0x00);
+    try std.testing.expect(computer.registers[0xb] == 0x00);
+    try std.testing.expect(computer.program_counter == 0x202);
+
+    // key 2 pressed
+    try computer.evaluate(0x6b01, 0b0000000000000100);
+    try std.testing.expect(computer.registers[0xa] == 0x02);
+    try std.testing.expect(computer.registers[0xb] == 0x01);
+    try std.testing.expect(computer.program_counter == 0x204);
 }
 
 test "evaluate fx1e instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0xa123);
-    try computer.evaluate(0x6abc);
-    try computer.evaluate(0xfa1e);
+    try computer.evaluate(0xa123, 0x00);
+    try computer.evaluate(0x6abc, 0x00);
+    try computer.evaluate(0xfa1e, 0x00);
     try std.testing.expect(computer.address_register == 0x1df);
     try std.testing.expect(computer.program_counter == 0x206);
 }
@@ -624,8 +727,8 @@ test "evaluate fx29 instruction" {
     var computer = try Computer.init(std.testing.allocator, 0);
     defer computer.free();
 
-    try computer.evaluate(0x6a04);
-    try computer.evaluate(0xfa29);
+    try computer.evaluate(0x6a04, 0x00);
+    try computer.evaluate(0xfa29, 0x00);
     try std.testing.expect(computer.address_register == 0x1c4);
     try std.testing.expect(computer.program_counter == 0x204);
 }
@@ -639,7 +742,7 @@ test "evaluate fx33 instruction" {
     computer.memory[0xa02] = 0x00;
     computer.address_register = 0xa00;
     computer.registers[1] = 234;
-    try computer.evaluate(0xf133);
+    try computer.evaluate(0xf133, 0x00);
 
     try std.testing.expectEqual(0x2, computer.memory[0xa00]);
     try std.testing.expectEqual(0x3, computer.memory[0xa01]);
@@ -654,7 +757,7 @@ test "evaluate fx55 instruction" {
     // store 16 zeros
     computer.address_register = 0xa00;
     computer.registers = .{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    try computer.evaluate(0xff55);
+    try computer.evaluate(0xff55, 0x00);
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, computer.memory[0xa00..0xa10]);
     try std.testing.expectEqual(0xa10, computer.address_register);
     try std.testing.expect(computer.program_counter == 0x202);
@@ -662,7 +765,7 @@ test "evaluate fx55 instruction" {
     // store registers 0 to 5
     computer.address_register = 0xa00;
     computer.registers = .{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
-    try computer.evaluate(0xf555);
+    try computer.evaluate(0xf555, 0x00);
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, computer.memory[0xa00..0xa10]);
     try std.testing.expectEqual(0xa06, computer.address_register);
     try std.testing.expect(computer.program_counter == 0x204);
@@ -676,7 +779,7 @@ test "evaluate fx65 instruction" {
     for (0xa00..0xa10) |i|
         computer.memory[i] = 0x00;
     computer.address_register = 0xa00;
-    try computer.evaluate(0xff65);
+    try computer.evaluate(0xff65, 0x00);
     try std.testing.expectEqual([16]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, computer.registers);
     try std.testing.expectEqual(0xa10, computer.address_register);
     try std.testing.expect(computer.program_counter == 0x202);
@@ -699,7 +802,7 @@ test "evaluate fx65 instruction" {
     computer.memory[0xa0e] = 0xee;
     computer.memory[0xa0f] = 0xff;
     computer.address_register = 0xa00;
-    try computer.evaluate(0xf565);
+    try computer.evaluate(0xf565, 0x00);
     try std.testing.expectEqual([16]u8{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, computer.registers);
     try std.testing.expectEqual(0xa06, computer.address_register);
     try std.testing.expect(computer.program_counter == 0x204);

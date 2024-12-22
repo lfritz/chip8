@@ -5,7 +5,6 @@ pub const ScreenError = error{
 };
 
 pub const Screen = struct {
-    // TODO allocate 'rows' on the heap
     rows: [0x20]u64,
 
     pub fn init() Screen {

@@ -1,4 +1,3 @@
-// build with `zig build-exe main.zig -lc -lraylib`
 const std = @import("std");
 const ray = @cImport({
     @cInclude("raylib.h");

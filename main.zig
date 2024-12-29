@@ -81,6 +81,18 @@ pub fn main() !void {
                 break;
             }
         }
+        if (ray.IsKeyDown(ray.KEY_UP)) {
+            keys |= (@as(u16, 1) << @intCast(2));
+        }
+        if (ray.IsKeyDown(ray.KEY_DOWN)) {
+            keys |= (@as(u16, 1) << @intCast(8));
+        }
+        if (ray.IsKeyDown(ray.KEY_LEFT)) {
+            keys |= (@as(u16, 1) << @intCast(4));
+        }
+        if (ray.IsKeyDown(ray.KEY_RIGHT)) {
+            keys |= (@as(u16, 1) << @intCast(6));
+        }
 
         for (0..speedup) |_| {
             c.tick(keys) catch |err| {

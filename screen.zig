@@ -26,14 +26,26 @@ pub const Screen = struct {
     }
 
     pub fn draw(self: *Screen, x: u6, y: u6, sprite: []const u8) !bool {
-        if (x > 0x38)
-            return ScreenError.OutOfBounds;
-        if (y + sprite.len > 0x20)
-            return ScreenError.OutOfBounds;
+        // make sure we're not trying to draw beyond the last row
+        var sprite_rows = sprite;
+        if (y + sprite_rows.len > 0x20)
+            sprite_rows = sprite_rows[0..(0x20 - y)];
+
+        // determine how to shift each sprite row left or right
+        var shift_left: u6 = 0;
+        var shift_right: u6 = 0;
+        if (x < 0x38) {
+            shift_left = 0x38 - x;
+        } else {
+            shift_right = x - 0x38;
+        }
+
+        // draw sprite rows
         var result = false;
-        const shift = 0x40 - 0x08 - x;
-        for (sprite, y..) |v, i| {
-            const mask: u64 = @as(u64, v) << shift;
+        for (sprite_rows, y..) |v, i| {
+            var mask: u64 = @as(u64, v);
+            mask >>= shift_right;
+            mask <<= shift_left;
             result = result or ((self.rows[i] & mask) != 0);
             self.rows[i] ^= mask;
         }
@@ -178,23 +190,62 @@ test "Screen.draw draws a 16-byte sprite" {
     try std.testing.expect(try screen.get(0x39, 0x1f) == false);
 }
 
-test "Screen.draw returns ScreenError.OutOfBounds" {
+test "Screen.draw handles drawing off screen" {
     var screen = Screen.init();
     screen.clear();
 
     const sprite = [_]u8{ 0xff, 0xff, 0xff, 0xff }; // 8x4 sprite
 
-    // screen corners, not out of bounds
-    _ = try screen.draw(0x00, 0x00, &sprite);
-    _ = try screen.draw(0x38, 0x00, &sprite);
-    _ = try screen.draw(0x00, 0x1c, &sprite);
-    _ = try screen.draw(0x38, 0x1c, &sprite);
+    const flipped = try screen.draw(0x00, 0x20, &sprite);
+    try std.testing.expect(!flipped);
 
-    // whole sprite is out of bounds
-    try std.testing.expectError(ScreenError.OutOfBounds, screen.draw(0x00, 0x20, &sprite));
+    try std.testing.expect(try screen.get(0x00, 0x1f) == false);
+}
 
-    // sprite is partly out of bounds
-    try std.testing.expectError(ScreenError.OutOfBounds, screen.draw(0x39, 0x00, &sprite));
-    try std.testing.expectError(ScreenError.OutOfBounds, screen.draw(0x00, 0x1d, &sprite));
-    try std.testing.expectError(ScreenError.OutOfBounds, screen.draw(0x39, 0x1d, &sprite));
+test "Screen.draw handles drawing partially off screen (horizontal)" {
+    var screen = Screen.init();
+    screen.clear();
+
+    const sprite = [_]u8{ 0xff, 0xff, 0xff, 0xff }; // 8x4 sprite
+    const flipped = try screen.draw(0x39, 0x00, &sprite);
+    try std.testing.expect(!flipped);
+
+    try std.testing.expect(try screen.get(0x38, 0x00) == false);
+    try std.testing.expect(try screen.get(0x38, 0x01) == false);
+    try std.testing.expect(try screen.get(0x38, 0x02) == false);
+    try std.testing.expect(try screen.get(0x38, 0x03) == false);
+    try std.testing.expect(try screen.get(0x39, 0x00));
+    try std.testing.expect(try screen.get(0x39, 0x01));
+    try std.testing.expect(try screen.get(0x39, 0x02));
+    try std.testing.expect(try screen.get(0x39, 0x03));
+    try std.testing.expect(try screen.get(0x39, 0x04) == false);
+}
+
+test "Screen.draw handles drawing partially off screen (vertical)" {
+    var screen = Screen.init();
+    screen.clear();
+
+    const sprite = [_]u8{ 0xff, 0xff, 0xff, 0xff }; // 8x4 sprite
+    const flipped = try screen.draw(0x00, 0x1f, &sprite);
+    try std.testing.expect(!flipped);
+
+    try std.testing.expect(try screen.get(0x00, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x01, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x02, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x03, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x04, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x05, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x06, 0x1e) == false);
+    try std.testing.expect(try screen.get(0x07, 0x1e) == false);
+
+    try std.testing.expect(try screen.get(0x00, 0x1f));
+    try std.testing.expect(try screen.get(0x01, 0x1f));
+    try std.testing.expect(try screen.get(0x02, 0x1f));
+    try std.testing.expect(try screen.get(0x03, 0x1f));
+    try std.testing.expect(try screen.get(0x04, 0x1f));
+    try std.testing.expect(try screen.get(0x05, 0x1f));
+    try std.testing.expect(try screen.get(0x06, 0x1f));
+    try std.testing.expect(try screen.get(0x07, 0x1f));
+
+    try std.testing.expect(try screen.get(0x08, 0x1f) == false);
 }

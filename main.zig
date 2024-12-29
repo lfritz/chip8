@@ -99,10 +99,6 @@ pub fn main() !void {
                     ray.TraceLog(ray.LOG_ERROR, "invalid key");
                     return err;
                 },
-                screen.ScreenError.OutOfBounds => {
-                    ray.TraceLog(ray.LOG_ERROR, "screen coordinate out of bounds");
-                    return err;
-                },
             }
         };
 

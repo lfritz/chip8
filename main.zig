@@ -3,6 +3,7 @@ const ray = @cImport({
     @cInclude("raylib.h");
 });
 const computer = @import("computer.zig");
+const screen = @import("screen.zig");
 
 pub const ParseError = error{
     InvalidCharacter,
@@ -79,11 +80,29 @@ pub fn main() !void {
         }
 
         c.tick(keys) catch |err| {
-            if (err == computer.Error.InvalidInstruction) {
-                const addr = c.program_counter;
-                const i = c.loadInstruction();
-                ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
-                return err;
+            switch (err) {
+                computer.Error.InvalidInstruction => {
+                    const addr = c.program_counter;
+                    const i = c.loadInstruction();
+                    ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
+                    return err;
+                },
+                computer.Error.StackOverflow => {
+                    ray.TraceLog(ray.LOG_ERROR, "stack overflow");
+                    return err;
+                },
+                computer.Error.StackUnderflow => {
+                    ray.TraceLog(ray.LOG_ERROR, "stack underflow");
+                    return err;
+                },
+                computer.Error.InvalidKey => {
+                    ray.TraceLog(ray.LOG_ERROR, "invalid key");
+                    return err;
+                },
+                screen.ScreenError.OutOfBounds => {
+                    ray.TraceLog(ray.LOG_ERROR, "screen coordinate out of bounds");
+                    return err;
+                },
             }
         };
 

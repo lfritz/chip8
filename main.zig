@@ -34,6 +34,9 @@ const all_keys = [_]c_int{
 };
 
 pub fn main() !void {
+    // TODO that should be configurable
+    const speedup = 10;
+
     const zoom = 5;
     const width = 0x40;
     const height = 0x20;
@@ -79,28 +82,30 @@ pub fn main() !void {
             }
         }
 
-        c.tick(keys) catch |err| {
-            switch (err) {
-                computer.Error.InvalidInstruction => {
-                    const addr = c.program_counter;
-                    const i = c.loadInstruction();
-                    ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
-                    return err;
-                },
-                computer.Error.StackOverflow => {
-                    ray.TraceLog(ray.LOG_ERROR, "stack overflow");
-                    return err;
-                },
-                computer.Error.StackUnderflow => {
-                    ray.TraceLog(ray.LOG_ERROR, "stack underflow");
-                    return err;
-                },
-                computer.Error.InvalidKey => {
-                    ray.TraceLog(ray.LOG_ERROR, "invalid key");
-                    return err;
-                },
-            }
-        };
+        for (0..speedup) |_| {
+            c.tick(keys) catch |err| {
+                switch (err) {
+                    computer.Error.InvalidInstruction => {
+                        const addr = c.program_counter;
+                        const i = c.loadInstruction();
+                        ray.TraceLog(ray.LOG_ERROR, "invalid instruction at %03x: %04x", @as(c_int, addr), @as(c_int, i));
+                        return err;
+                    },
+                    computer.Error.StackOverflow => {
+                        ray.TraceLog(ray.LOG_ERROR, "stack overflow");
+                        return err;
+                    },
+                    computer.Error.StackUnderflow => {
+                        ray.TraceLog(ray.LOG_ERROR, "stack underflow");
+                        return err;
+                    },
+                    computer.Error.InvalidKey => {
+                        ray.TraceLog(ray.LOG_ERROR, "invalid key");
+                        return err;
+                    },
+                }
+            };
+        }
 
         if (c.sound() != sound) {
             sound = !sound;

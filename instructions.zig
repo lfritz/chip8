@@ -1,5 +1,9 @@
 const std = @import("std");
 
+// An Instruction represents a CHIP-8 instruction. See
+// https://en.m.wikipedia.org/wiki/CHIP-8#Opcode_table or
+// https://github.com/mattmikolay/chip-8/wiki/CHIP‐8-Instruction-Set
+// for an overview.
 pub const Instruction = union(enum) {
     clear_screen,
     return_from_subroutine,
@@ -118,6 +122,7 @@ pub const Instruction = union(enum) {
     invalid,
 };
 
+// Given a 16-bit CHIP-8 instruction, return the matching Instruction.
 pub fn decode(instruction: u16) Instruction {
     const n0: u4 = @intCast(instruction >> 12);
     const n1: u4 = @intCast((instruction >> 8) & 0x000f);

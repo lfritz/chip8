@@ -1,3 +1,9 @@
+// Command-line program to transform a binary CHIP-8 program to hexadecimal notation.
+//
+// Usage:
+//
+//     zig run hex.zig -- input output.hex
+
 const std = @import("std");
 
 pub fn main() !void {

@@ -26,6 +26,7 @@ const font = [font_bytes]u8{
 };
 const font_start = program_start - font_bytes;
 
+// The Error type defines the errors that can occur during CHIP-8 emulation.
 pub const Error = error{
     InvalidInstruction,
     StackOverflow,
@@ -33,6 +34,7 @@ pub const Error = error{
     InvalidKey,
 };
 
+// A Computer runs CHIP-8 programs. It's the core of the emulator.
 pub const Computer = struct {
     allocator: std.mem.Allocator,
     registers: [0x10]u8,
@@ -47,6 +49,7 @@ pub const Computer = struct {
     delay_timer: u8,
     sound_timer: u8,
 
+    // Create a new Computer. The value of memory and registers is initially undefined.
     pub fn init(allocator: std.mem.Allocator, randomSeed: u64) !Computer {
         const memory = try allocator.alloc(u8, 0x1000);
         const prng = std.Random.Xoshiro256.init(randomSeed);
@@ -69,24 +72,30 @@ pub const Computer = struct {
         };
     }
 
+    // Free memory allocated for the Computer.
     pub fn free(self: *Computer) void {
         self.allocator.free(self.memory);
     }
 
+    // Return true if the buzzer is playing a sound.
     pub fn sound(self: *Computer) bool {
         return self.sound_timer > 0;
     }
 
+    // Evaluate one instruction. The 'keys' argument indicates which keys are currently pressed. For
+    // example, if key 5 is pressed, keys should be 1 << 5.
     pub fn tick(self: *Computer, keys: u16) !void {
         try self.evaluate(self.loadInstruction(), keys);
     }
 
+    // Return the instruction currently indicated by the program counter.
     pub fn loadInstruction(self: *Computer) u16 {
         const msb = self.memory[self.program_counter];
         const lsb = self.memory[self.program_counter + 1];
         return (@as(u16, msb) << 8) | lsb;
     }
 
+    // Evaluate the instruction and update the program counter.
     fn evaluate(self: *Computer, instruction: u16, keys: u16) !void {
         if (instruction == 0x0000)
             return;

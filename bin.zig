@@ -1,3 +1,18 @@
+// Command-line program to transform a CHIP-8 program in hexadecimal notation to a binary one that
+// can be loaded into the interpreter.
+//
+// Usage:
+//
+//     zig run bin.zig -- input.hex output
+//
+// The input file must contain only hex digits and whitespace. Example:
+//
+//     600c f029 6100 6200 d125
+//     600a f029 6105 d125
+//     600f f029 610a d125
+//     600e f029 610f d125
+//     0000
+
 const std = @import("std");
 
 pub fn main() !void {

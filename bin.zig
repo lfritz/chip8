@@ -5,13 +5,7 @@
 //
 //     zig run bin.zig -- input.hex output
 //
-// The input file must contain only hex digits and whitespace. Example:
-//
-//     600c f029 6100 6200 d125
-//     600a f029 6105 d125
-//     600f f029 610a d125
-//     600e f029 610f d125
-//     0000
+// The input file must contain only hex digits and whitespace. See cafe.hex for an example.
 
 const std = @import("std");
 

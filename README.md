@@ -25,7 +25,7 @@ The file [cafe.hex](cafe.hex) contains a Hello, World! type program. You can run
 For more CHIP-8 programs, take a look at
 [github.com/JamesGriffin/CHIP-8-Emulator/tree/master/roms][james-griffin-roms] or
 [github.com/dmatlack/chip8/tree/master/roms][dmatlack-roms]. The screenshot at the top is the BRIX
-[game available from both.
+game available from both.
 
 
 [wikipedia-chip-8]: https://en.m.wikipedia.org/wiki/CHIP-8
